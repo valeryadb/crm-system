@@ -1,0 +1,23 @@
+{
+  "id": "lead_101",
+  "dataCadastro": "2026-07-21",
+  "identificacao": {
+    "nome": "Carla Mendes",
+    "email": "carla.mendes@email.com",
+    "telefone": "(61) 99999-8888",
+    "empresa": "Mendes Soluções",
+    "cargo": "Gerente de Operações"
+  },
+  "qualificacao": {
+    "origem": "Instagram",
+    "ramoAtividade": "Consultoria",
+    "porteEmpresa": "Pequena (1 a 10 funcionários)",
+    "principalDor": "Falta de controle no funil de vendas"
+  },
+  "historicoComercial": {
+    "produtosAdquiridos": [],
+    "valorTotalGasto": 0,
+    "ultimaInteracao": "2026-07-21",
+    "statusAtual": "Novo Lead"
+  }
+}

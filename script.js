@@ -1,20 +1,21 @@
-/* ==============================================
-   LÓGICA CRM — ENGENHARIA ALTO PADRÃO
-============================================== */
+/* 
+   LÓGICA DO CRM - PERSISTÊNCIA EM LOCALSTORAGE (JSON)
+    */
 
 const STAGES = [
     { id: 'prospeccao', label: 'Prospecção', color: '#7b8cde' },
-    { id: 'visita', label: 'Visita Técnica', color: '#4c8ce8' },
-    { id: 'orcamento', label: 'Orçamento Enviado', color: '#c9a84c' },
+    { id: 'visita', label: 'Contato Inicial', color: '#4c8ce8' },
+    { id: 'orcamento', label: 'Proposta Enviada', color: '#c9a84c' },
     { id: 'negociacao', label: 'Negociação', color: '#e8a94c' },
-    { id: 'fechado', label: 'Fechado', color: '#4caf81' },
+    { id: 'fechado', label: 'Fechado (Ganho)', color: '#4caf81' },
     { id: 'perdido', label: 'Perdido', color: '#e05252' }
 ];
 
+// Lê o JSON do LocalStorage ao iniciar
 let leads = JSON.parse(localStorage.getItem('arq_crm_leads')) || [];
 
 document.addEventListener('DOMContentLoaded', () => {
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
     initModalSelectors();
     initFilters();
     renderDashboard();
@@ -44,10 +45,10 @@ function showView(viewName) {
     if (viewName === 'followup') renderFollowup();
     if (viewName === 'leads') renderLeads();
 
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
 }
 
-// ── KANBAN LOGIC (REVISADA) ──────────────────
+// ── KANBAN LOGIC ──────────────────
 
 function renderKanban() {
     const board = document.getElementById('kanban-board');
@@ -69,7 +70,7 @@ function renderKanban() {
                             <div class="card-name">${l.nome}</div>
                             ${l.empresa ? `<div class="card-company">${l.empresa}</div>` : ''}
                             <div class="card-meta">
-                                <span class="tag ${getOrigemClass(l.origem)}">${l.origem}</span>
+                                <span class="tag">${l.origem || 'Geral'}</span>
                             </div>
                             ${l.custo ? `<div class="card-cost">${formatCurrency(l.custo)}</div>` : ''}
                         </div>
@@ -80,14 +81,8 @@ function renderKanban() {
     }).join('');
 }
 
-// Funções de Arrastar e Soltar
-function allowDrop(ev) {
-    ev.preventDefault();
-}
-
-function drag(ev, id) {
-    ev.dataTransfer.setData("text", id);
-}
+function allowDrop(ev) { ev.preventDefault(); }
+function drag(ev, id) { ev.dataTransfer.setData("text", id); }
 
 function drop(ev, stageId) {
     ev.preventDefault();
@@ -98,15 +93,16 @@ function drop(ev, stageId) {
     showToast("Estágio atualizado!");
 }
 
-// ── CRUD LEADS ───────────────────────────────
+// ── CRUD LEADS & PERSISTÊNCIA ───────────────────────────────
 
 function saveLead() {
     const id = document.getElementById('f-lead-id').value;
     const nome = document.getElementById('f-nome').value;
+    const email = document.getElementById('f-email').value;
     const telefone = document.getElementById('f-telefone').value;
     const estagio = document.getElementById('f-estagio').value;
 
-    if (!nome || !telefone || !estagio) {
+    if (!nome || !email || !telefone || !estagio) {
         showToast("Preencha os campos obrigatórios (*)");
         return;
     }
@@ -114,12 +110,14 @@ function saveLead() {
     const leadData = {
         id: id || Date.now().toString(),
         nome: nome,
-        empresa: document.getElementById('f-empresa').value,
+        email: email,
         telefone: telefone,
+        empresa: document.getElementById('f-empresa').value,
+        cargo: document.getElementById('f-cargo').value,
         origem: document.getElementById('f-origem').value,
-        metragem: document.getElementById('f-metragem').value,
+        porte: document.getElementById('f-porte').value,
         custo: parseFloat(document.getElementById('f-custo').value) || 0,
-        tipoObra: document.getElementById('f-tipo-obra').value,
+        dor: document.getElementById('f-dor').value,
         estagio: estagio,
         retorno: document.getElementById('f-retorno').value,
         notas: document.getElementById('f-notas').value,
@@ -134,23 +132,48 @@ function saveLead() {
 
     persist();
     closeLeadModal();
-    showToast("Lead salvo!");
+    showToast("Lead salvo com sucesso!");
     
-    const activeView = document.querySelector('.nav-item.active').getAttribute('data-view');
+    const activeNav = document.querySelector('.nav-item.active');
+    const activeView = activeNav ? activeNav.getAttribute('data-view') : 'dashboard';
     showView(activeView);
 }
 
+function editLead(id) {
+    closeDetailModal();
+    const l = leads.find(lead => lead.id === id);
+    if (!l) return;
+
+    document.getElementById('modal-title').innerText = "Editar Lead";
+    document.getElementById('f-lead-id').value = l.id;
+    document.getElementById('f-nome').value = l.nome || '';
+    document.getElementById('f-email').value = l.email || '';
+    document.getElementById('f-telefone').value = l.telefone || '';
+    document.getElementById('f-empresa').value = l.empresa || '';
+    document.getElementById('f-cargo').value = l.cargo || '';
+    document.getElementById('f-origem').value = l.origem || '';
+    document.getElementById('f-porte').value = l.porte || '';
+    document.getElementById('f-custo').value = l.custo || 0;
+    document.getElementById('f-dor').value = l.dor || '';
+    document.getElementById('f-estagio').value = l.estagio || 'prospeccao';
+    document.getElementById('f-retorno').value = l.retorno || '';
+    document.getElementById('f-notas').value = l.notas || '';
+
+    document.getElementById('modal-overlay').classList.add('open');
+}
+
 function deleteLead(id) {
-    if (confirm("Excluir este lead?")) {
+    if (confirm("Excluir este cliente do CRM?")) {
         leads = leads.filter(l => l.id !== id);
         persist();
-        const activeView = document.querySelector('.nav-item.active').getAttribute('data-view');
+        const activeNav = document.querySelector('.nav-item.active');
+        const activeView = activeNav ? activeNav.getAttribute('data-view') : 'dashboard';
         showView(activeView);
-        showToast("Removido.");
+        showToast("Removido com sucesso.");
     }
 }
 
-// ── RENDER DASHBOARD ──────────────────────────
+// ── DASHBOARD & INDICADORES ──────────────────────────
 
 function renderDashboard() {
     const negociacao = leads.filter(l => ['prospeccao', 'visita', 'orcamento', 'negociacao'].includes(l.estagio));
@@ -164,6 +187,8 @@ function renderDashboard() {
     const hoje = new Date().toISOString().split('T')[0];
     const alertas = leads.filter(l => l.retorno && l.retorno <= hoje && l.estagio !== 'fechado' && l.estagio !== 'perdido');
     
+    document.getElementById('kpi-followups').innerText = alertas.length;
+
     const container = document.getElementById('dashboard-alerts');
     if (alertas.length === 0) {
         container.innerHTML = `<p class="empty-state">Tudo em dia!</p>`;
@@ -172,7 +197,7 @@ function renderDashboard() {
             <div class="alert-item ${l.retorno < hoje ? 'overdue' : 'today'}">
                 <div class="alert-info">
                     <span class="alert-name">${l.nome}</span>
-                    <span class="alert-meta">${l.origem}</span>
+                    <span class="alert-meta">${l.empresa || l.telefone}</span>
                 </div>
                 <span class="alert-date">${l.retorno < hoje ? 'ATRASADO' : 'HOJE'}</span>
                 <button class="btn-icon" onclick="editLead('${l.id}')"><i data-lucide="pencil"></i></button>
@@ -186,10 +211,10 @@ function renderDashboard() {
         return `<div class="funnel-pill"><span class="pill-count">${count}</span><span class="pill-label">${s.label}</span></div>`;
     }).join('');
 
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
 }
 
-// ── RENDER LEADS ──────────────────────────────
+// ── TABELA DE LEADS ──────────────────────────────
 
 function renderLeads() {
     const tbody = document.getElementById('leads-tbody');
@@ -200,27 +225,34 @@ function renderLeads() {
     if (fStage) filtered = filtered.filter(l => l.estagio === fStage);
     if (fOrigem) filtered = filtered.filter(l => l.origem === fOrigem);
 
-    tbody.innerHTML = filtered.map(l => `
-        <tr>
-            <td><div class="td-name">${l.nome}</div><div class="td-company">${l.empresa || '-'}</div></td>
-            <td>${l.telefone}</td>
-            <td>${l.origem}</td>
-            <td><span class="stage-pill ${l.estagio}">${STAGES.find(s=>s.id===l.estagio).label}</span></td>
-            <td>${l.metragem || '-'} m²</td>
-            <td class="td-cost">${formatCurrency(l.custo)}</td>
-            <td>${l.retorno ? formatDate(l.retorno) : '-'}</td>
-            <td>
-                <div class="td-actions">
-                    <button class="btn-icon" onclick="editLead('${l.id}')"><i data-lucide="pencil"></i></button>
-                    <button class="btn-danger" onclick="deleteLead('${l.id}')"><i data-lucide="trash-2"></i></button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
-    lucide.createIcons();
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem;">Nenhum lead encontrado.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(l => {
+        const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
+        return `
+            <tr>
+                <td><div class="td-name">${l.nome}</div><div class="td-company">${l.empresa || '-'}</div></td>
+                <td><div>${l.telefone}</div><small style="color:#888;">${l.email || '-'}</small></td>
+                <td>${l.origem || 'Geral'}</td>
+                <td><span class="stage-pill ${l.estagio}" style="background:${stageObj.color}22; color:${stageObj.color}; padding:4px 8px; border-radius:4px;">${stageObj.label}</span></td>
+                <td class="td-cost">${formatCurrency(l.custo)}</td>
+                <td>${l.retorno ? formatDate(l.retorno) : '-'}</td>
+                <td>
+                    <div class="td-actions">
+                        <button class="btn-icon" onclick="editLead('${l.id}')"><i data-lucide="pencil"></i></button>
+                        <button class="btn-danger" onclick="deleteLead('${l.id}')"><i data-lucide="trash-2"></i></button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+    if (window.lucide) lucide.createIcons();
 }
 
-// ── RENDER FOLLOW-UP ──────────────────────────
+// ── FOLLOW-UP ──────────────────────────
 
 function renderFollowup() {
     const container = document.getElementById('followup-list');
@@ -234,33 +266,36 @@ function renderFollowup() {
     filtered.sort((a,b) => new Date(a.retorno) - new Date(b.retorno));
 
     if (filtered.length === 0) {
-        container.innerHTML = `<p class="empty-state">Sem retornos.</p>`;
+        container.innerHTML = `<p class="empty-state">Sem retornos pendentes.</p>`;
         return;
     }
 
-    container.innerHTML = filtered.map(l => `
-        <div class="followup-item ${l.retorno < hoje ? 'overdue' : (l.retorno === hoje ? 'today' : 'future')}">
-            <div class="fu-info">
-                <div class="fu-name">${l.nome}</div>
-                <div class="fu-sub">${STAGES.find(s=>s.id===l.estagio).label} | ${l.telefone}</div>
+    container.innerHTML = filtered.map(l => {
+        const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
+        return `
+            <div class="followup-item ${l.retorno < hoje ? 'overdue' : (l.retorno === hoje ? 'today' : 'future')}">
+                <div class="fu-info">
+                    <div class="fu-name">${l.nome}</div>
+                    <div class="fu-sub">${stageObj.label} | ${l.telefone}</div>
+                </div>
+                <div class="fu-date-wrap">
+                    <span class="fu-date">${formatDate(l.retorno)}</span>
+                </div>
+                <div class="fu-actions">
+                    <button class="btn-primary" onclick="editLead('${l.id}')">Retornar</button>
+                </div>
             </div>
-            <div class="fu-date-wrap">
-                <span class="fu-date">${formatDate(l.retorno)}</span>
-            </div>
-            <div class="fu-actions">
-                <button class="btn-primary" onclick="editLead('${l.id}')">Retornar</button>
-            </div>
-        </div>
-    `).join('');
-    lucide.createIcons();
+        `;
+    }).join('');
+    if (window.lucide) lucide.createIcons();
 }
 
-// ── MODAL CONTROLS ────────────────────────────
+// ── CONTROLE DOS MODAIS ────────────────────────────
 
 function openLeadModal() {
     document.getElementById('modal-title').innerText = "Novo Lead";
     document.getElementById('f-lead-id').value = "";
-    document.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(el => el.value = "");
+    document.getElementById('form-lead').reset();
     document.getElementById('modal-overlay').classList.add('open');
 }
 
@@ -270,37 +305,24 @@ function closeLeadModal(e) {
     }
 }
 
-function editLead(id) {
-    const l = leads.find(lead => lead.id === id);
-    if (!l) return;
-    closeDetailModal();
-    document.getElementById('modal-title').innerText = "Editar Lead";
-    document.getElementById('f-lead-id').value = l.id;
-    document.getElementById('f-nome').value = l.nome;
-    document.getElementById('f-empresa').value = l.empresa;
-    document.getElementById('f-telefone').value = l.telefone;
-    document.getElementById('f-origem').value = l.origem;
-    document.getElementById('f-metragem').value = l.metragem;
-    document.getElementById('f-custo').value = l.custo;
-    document.getElementById('f-tipo-obra').value = l.tipoObra;
-    document.getElementById('f-estagio').value = l.estagio;
-    document.getElementById('f-retorno').value = l.retorno;
-    document.getElementById('f-notas').value = l.notas;
-    document.getElementById('modal-overlay').classList.add('open');
-}
-
 function openDetailModal(id) {
     const l = leads.find(lead => lead.id === id);
     if (!l) return;
     const body = document.getElementById('detail-body');
+    const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
+
     document.getElementById('detail-title').innerText = l.nome;
     body.innerHTML = `
-        <div class="detail-grid">
-            <div class="detail-item"><span class="detail-label">Empresa</span><span class="detail-value">${l.empresa || '-'}</span></div>
-            <div class="detail-item"><span class="detail-label">Estágio</span><span class="detail-value">${STAGES.find(s=>s.id===l.estagio).label}</span></div>
-            <div class="detail-item"><span class="detail-label">Investimento</span><span class="detail-value">${formatCurrency(l.custo)}</span></div>
+        <div class="detail-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+            <div class="detail-item"><strong>E-mail:</strong> ${l.email || '-'}</div>
+            <div class="detail-item"><strong>Telefone:</strong> ${l.telefone || '-'}</div>
+            <div class="detail-item"><strong>Empresa:</strong> ${l.empresa || '-'}</div>
+            <div class="detail-item"><strong>Estágio:</strong> ${stageObj.label}</div>
+            <div class="detail-item"><strong>Investimento:</strong> ${formatCurrency(l.custo)}</div>
+            <div class="detail-item"><strong>Porte:</strong> ${l.porte || '-'}</div>
         </div>
-        <div class="detail-notes">${l.notas || 'Sem notas.'}</div>
+        <div><strong>Dor do Cliente:</strong> <p>${l.dor || 'Não informada.'}</p></div>
+        <div><strong>Notas:</strong> <p>${l.notas || 'Sem notas.'}</p></div>
     `;
     document.getElementById('detail-edit-btn').onclick = () => editLead(l.id);
     document.getElementById('detail-overlay').classList.add('open');
@@ -312,7 +334,7 @@ function closeDetailModal(e) {
     }
 }
 
-// ── HELPERS ───────────────────────────────────
+// ── HELPERS & PERSISTÊNCIA ───────────────────────────────────
 
 function persist() {
     localStorage.setItem('arq_crm_leads', JSON.stringify(leads));
@@ -334,37 +356,60 @@ function formatCurrency(val) {
 }
 
 function formatDate(dateStr) {
+    if (!dateStr) return '-';
     const [y, m, d] = dateStr.split('-');
     return `${d}/${m}/${y}`;
 }
 
-function getOrigemClass(origem) {
-    if (origem === 'Arquiteto') return 'origem-arq';
-    if (origem === 'Indicação') return 'origem-ind';
-    if (origem === 'Prospecção Ativa') return 'origem-pro';
-    return '';
-}
-
 function initModalSelectors() {
     const select = document.getElementById('f-estagio');
-    select.innerHTML = STAGES.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+    if (select) {
+        select.innerHTML = STAGES.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+    }
 }
 
 function initFilters() {
     const select = document.getElementById('leads-filter-stage');
-    select.innerHTML = '<option value="">Todos</option>' + STAGES.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+    if (select) {
+        select.innerHTML = '<option value="">Todos</option>' + STAGES.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+    }
 }
 
 function showToast(msg) {
     const t = document.getElementById('toast');
-    t.innerText = msg; t.classList.add('show');
+    if (!t) return;
+    t.innerText = msg; 
+    t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 3000);
 }
 
 function globalSearch(query) {
     if (!query) { showView('dashboard'); return; }
     showView('leads');
-    const filtered = leads.filter(l => l.nome.toLowerCase().includes(query.toLowerCase()));
+    const filtered = leads.filter(l => l.nome.toLowerCase().includes(query.toLowerCase()) || (l.empresa && l.empresa.toLowerCase().includes(query.toLowerCase())));
     const tbody = document.getElementById('leads-tbody');
-    tbody.innerHTML = filtered.map(l => `<tr><td>${l.nome}</td><td>${l.telefone}</td><td>${l.origem}</td><td>${l.estagio}</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`).join('');
+    
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem;">Nenhum resultado para "${query}".</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(l => {
+        const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
+        return `
+            <tr>
+                <td><div class="td-name">${l.nome}</div><div class="td-company">${l.empresa || '-'}</div></td>
+                <td>${l.telefone}</td>
+                <td>${l.origem || 'Geral'}</td>
+                <td>${stageObj.label}</td>
+                <td>${formatCurrency(l.custo)}</td>
+                <td>${l.retorno ? formatDate(l.retorno) : '-'}</td>
+                <td>
+                    <button class="btn-icon" onclick="editLead('${l.id}')"><i data-lucide="pencil"></i></button>
+                    <button class="btn-danger" onclick="deleteLead('${l.id}')"><i data-lucide="trash-2"></i></button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+    if (window.lucide) lucide.createIcons();
 }

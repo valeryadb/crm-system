@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CRM</title>
+  <title>CRM System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
@@ -15,7 +15,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <span class="logo-icon"><i data-lucide="building-2"></i></span>
-      <span class="logo-text">Arq<strong>CRM</strong></span>
+      <span class="logo-text">System<strong>CRM</strong></span>
     </div>
     <nav class="sidebar-nav">
       <button class="nav-item active" onclick="showView('dashboard')" data-view="dashboard">
@@ -37,7 +37,7 @@
       </button>
     </nav>
     <div class="sidebar-footer">
-      <span class="version-tag">v1.0 — 2025</span>
+      <span class="version-tag">v1.0 — 2026</span>
     </div>
   </aside>
 
@@ -57,6 +57,7 @@
       </div>
     </header>
 
+    <!-- VIEW 1: DASHBOARD -->
     <section class="view active" id="view-dashboard">
       <div class="kpi-grid">
         <div class="kpi-card accent">
@@ -102,19 +103,22 @@
       <div class="funnel-summary" id="funnel-summary"></div>
     </section>
 
+    <!-- VIEW 2: KANBAN -->
     <section class="view" id="view-kanban">
       <div class="filter-bar">
         <label>Filtrar por Origem:</label>
         <select id="kanban-filter-origem" onchange="renderKanban()">
           <option value="">Todas</option>
-          <option value="Arquiteto">Arquiteto</option>
-          <option value="Indicação">Indicação</option>
-          <option value="Prospecção Ativa">Prospecção Ativa</option>
+          <option value="instagram">Instagram / Redes Sociais</option>
+          <option value="indicacao">Indicação</option>
+          <option value="site">Site / Google</option>
+          <option value="evento">Evento / Prospectado</option>
         </select>
       </div>
       <div class="kanban-board" id="kanban-board"></div>
     </section>
 
+    <!-- VIEW 3: FOLLOW-UP -->
     <section class="view" id="view-followup">
       <div class="filter-bar">
         <label>Filtrar:</label>
@@ -127,6 +131,7 @@
       <div class="followup-list" id="followup-list"></div>
     </section>
 
+    <!-- VIEW 4: LEADS TABLE -->
     <section class="view" id="view-leads">
       <div class="filter-bar">
         <label>Estágio:</label>
@@ -136,21 +141,21 @@
         <label style="margin-left:1rem;">Origem:</label>
         <select id="leads-filter-origem" onchange="renderLeads()">
           <option value="">Todas</option>
-          <option value="Arquiteto">Arquiteto</option>
-          <option value="Indicação">Indicação</option>
-          <option value="Prospecção Ativa">Prospecção Ativa</option>
+          <option value="instagram">Instagram / Redes Sociais</option>
+          <option value="indicacao">Indicação</option>
+          <option value="site">Site / Google</option>
+          <option value="evento">Evento / Prospectado</option>
         </select>
       </div>
       <div class="leads-table-wrap">
         <table class="leads-table">
           <thead>
             <tr>
-              <th>Nome / Empresa</th>
-              <th>Telefone</th>
+              <th>Cliente / Empresa</th>
+              <th>Contato / E-mail</th>
               <th>Origem</th>
               <th>Estágio</th>
-              <th>Metragem</th>
-              <th>Est. Custo</th>
+              <th>Valor Oportunidade</th>
               <th>Retorno</th>
               <th>Ações</th>
             </tr>
@@ -161,6 +166,7 @@
     </section>
   </main>
 
+  <!-- MODAL DE CADASTRO/EDIÇÃO DE LEAD -->
   <div class="modal-overlay" id="modal-overlay" onclick="closeLeadModal(event)">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div class="modal-header">
@@ -168,83 +174,98 @@
         <button class="modal-close" onclick="closeLeadModal()">&times;</button>
       </div>
       <div class="modal-body">
-        <fieldset class="form-section">
-          <legend>Identificação</legend>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="f-nome">Nome *</label>
-              <input type="text" id="f-nome" required />
+        <form id="form-lead" onsubmit="event.preventDefault(); saveLead();">
+          <fieldset class="form-section">
+            <legend>👤 Identificação do Cliente</legend>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="f-nome">Nome Completo *</label>
+                <input type="text" id="f-nome" placeholder="Ex: Carla Mendes" required />
+              </div>
+              <div class="form-group">
+                <label for="f-email">E-mail *</label>
+                <input type="email" id="f-email" placeholder="carla@email.com" required />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="f-telefone">WhatsApp / Telefone *</label>
+                <input type="tel" id="f-telefone" placeholder="(61) 99999-8888" required />
+              </div>
+              <div class="form-group">
+                <label for="f-empresa">Empresa / Organização</label>
+                <input type="text" id="f-empresa" placeholder="Nome da Empresa" />
+              </div>
             </div>
             <div class="form-group">
-              <label for="f-empresa">Empresa</label>
-              <input type="text" id="f-empresa" />
+              <label for="f-cargo">Cargo</label>
+              <input type="text" id="f-cargo" placeholder="Ex: Gerente de Operações" />
             </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="f-telefone">Telefone *</label>
-              <input type="tel" id="f-telefone" required />
-            </div>
-            <div class="form-group">
-              <label for="f-origem">Origem *</label>
-              <select id="f-origem" required>
-                <option value="">Selecione…</option>
-                <option value="Arquiteto">Arquiteto</option>
-                <option value="Indicação">Indicação</option>
-                <option value="Prospecção Ativa">Prospecção Ativa</option>
-              </select>
-            </div>
-          </div>
-        </fieldset>
-        <fieldset class="form-section">
-          <legend>Dados Técnicos</legend>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="f-metragem">Metragem (m²)</label>
-              <input type="number" id="f-metragem" />
-            </div>
-            <div class="form-group">
-              <label for="f-custo">Custo Estimado (R$)</label>
-              <input type="number" id="f-custo" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="f-tipo-obra">Tipo de Obra</label>
-            <select id="f-tipo-obra">
-              <option value="">Selecione…</option>
-              <option value="Clínica">Clínica</option>
-              <option value="Varejo">Varejo</option>
-              <option value="Corporativo">Corporativo</option>
-              <option value="Outro">Outro</option>
-            </select>
-          </div>
-        </fieldset>
-        <fieldset class="form-section">
-          <legend>Funil</legend>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="f-estagio">Estágio *</label>
-              <select id="f-estagio" required></select>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend>🎯 Qualificação e Negócio</legend>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="f-origem">Origem *</label>
+                <select id="f-origem" required>
+                  <option value="">Selecione…</option>
+                  <option value="instagram">Instagram / Redes Sociais</option>
+                  <option value="indicacao">Indicação</option>
+                  <option value="site">Site / Google</option>
+                  <option value="evento">Evento / Prospectado</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="f-porte">Porte da Empresa</label>
+                <select id="f-porte">
+                  <option value="">Selecione…</option>
+                  <option value="autonomo">Autônomo / Individual</option>
+                  <option value="pequena">Pequena (1-10 func.)</option>
+                  <option value="media">Média (11-50 func.)</option>
+                  <option value="grande">Grande (+50 func.)</option>
+                </select>
+              </div>
             </div>
             <div class="form-group">
-              <label for="f-retorno">Data de Retorno</label>
-              <input type="date" id="f-retorno" />
+              <label for="f-custo">Valor da Oportunidade (R$)</label>
+              <input type="number" id="f-custo" placeholder="0.00" step="0.01" />
             </div>
-          </div>
-          <div class="form-group">
-            <label for="f-notas">Notas</label>
-            <textarea id="f-notas" rows="3"></textarea>
-          </div>
-        </fieldset>
+            <div class="form-group">
+              <label for="f-dor">Principal Necessidade / Dor</label>
+              <textarea id="f-dor" rows="2" placeholder="O que o cliente precisa resolver?"></textarea>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend>📊 Status do Funil e Agendamento</legend>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="f-estagio">Estágio *</label>
+                <select id="f-estagio" required></select>
+              </div>
+              <div class="form-group">
+                <label for="f-retorno">Data de Retorno (Follow-up)</label>
+                <input type="date" id="f-retorno" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="f-notas">Notas / Histórico</label>
+              <textarea id="f-notas" rows="2" placeholder="Anotações da última reunião..."></textarea>
+            </div>
+          </fieldset>
+          
+          <input type="hidden" id="f-lead-id" value="" />
+        </form>
       </div>
       <div class="modal-footer">
-        <input type="hidden" id="f-lead-id" value="" />
         <button class="btn-secondary" onclick="closeLeadModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveLead()">Salvar Lead</button>
       </div>
     </div>
   </div>
 
+  <!-- MODAL DE DETALHES -->
   <div class="modal-overlay" id="detail-overlay" onclick="closeDetailModal(event)">
     <div class="modal modal-sm" role="dialog">
       <div class="modal-header">
