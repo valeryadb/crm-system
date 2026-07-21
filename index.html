@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-icon"><i data-lucide="building-2"></i></span>
+      <span class="logo-text">Arq<strong>CRM</strong></span>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick="showView('dashboard')" data-view="dashboard">
+        <i data-lucide="layout-dashboard"></i>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-item" onclick="showView('kanban')" data-view="kanban">
+        <i data-lucide="kanban"></i>
+        <span>Funil de Vendas</span>
+      </button>
+      <button class="nav-item" onclick="showView('followup')" data-view="followup">
+        <i data-lucide="bell"></i>
+        <span>Follow-up</span>
+        <span class="badge" id="followup-badge"></span>
+      </button>
+      <button class="nav-item" onclick="showView('leads')" data-view="leads">
+        <i data-lucide="users"></i>
+        <span>Leads</span>
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="version-tag">v1.0 — 2025</span>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title" id="page-title">Dashboard</h1>
+      </div>
+      <div class="topbar-right">
+        <div class="search-wrap">
+          <i data-lucide="search"></i>
+          <input type="text" id="global-search" placeholder="Buscar lead ou empresa…" oninput="globalSearch(this.value)" />
+        </div>
+        <button class="btn-primary" onclick="openLeadModal()">
+          <i data-lucide="plus"></i> Novo Lead
+        </button>
+      </div>
+    </header>
+
+    <section class="view active" id="view-dashboard">
+      <div class="kpi-grid">
+        <div class="kpi-card accent">
+          <div class="kpi-icon"><i data-lucide="handshake"></i></div>
+          <div class="kpi-info">
+            <span class="kpi-label">Em Negociação</span>
+            <span class="kpi-value" id="kpi-negociacao">0</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon"><i data-lucide="circle-dollar-sign"></i></div>
+          <div class="kpi-info">
+            <span class="kpi-label">Valor Total em Aberto</span>
+            <span class="kpi-value" id="kpi-valor-total">R$ 0</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon"><i data-lucide="trophy"></i></div>
+          <div class="kpi-info">
+            <span class="kpi-label">Contratos Fechados</span>
+            <span class="kpi-value" id="kpi-fechados">0</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon"><i data-lucide="alarm-clock"></i></div>
+          <div class="kpi-info">
+            <span class="kpi-label">Follow-ups Hoje</span>
+            <span class="kpi-value" id="kpi-followups">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <h2 class="section-title">Alertas de Retorno — Hoje e Atrasados</h2>
+      </div>
+      <div class="alert-list" id="dashboard-alerts">
+        <p class="empty-state">Nenhum follow-up urgente. Boa sorte!</p>
+      </div>
+
+      <div class="section-header" style="margin-top: 2rem;">
+        <h2 class="section-title">Distribuição no Funil</h2>
+      </div>
+      <div class="funnel-summary" id="funnel-summary"></div>
+    </section>
+
+    <section class="view" id="view-kanban">
+      <div class="filter-bar">
+        <label>Filtrar por Origem:</label>
+        <select id="kanban-filter-origem" onchange="renderKanban()">
+          <option value="">Todas</option>
+          <option value="Arquiteto">Arquiteto</option>
+          <option value="Indicação">Indicação</option>
+          <option value="Prospecção Ativa">Prospecção Ativa</option>
+        </select>
+      </div>
+      <div class="kanban-board" id="kanban-board"></div>
+    </section>
+
+    <section class="view" id="view-followup">
+      <div class="filter-bar">
+        <label>Filtrar:</label>
+        <select id="followup-filter" onchange="renderFollowup()">
+          <option value="pendentes">Pendentes e Atrasados</option>
+          <option value="todos">Todos os Leads</option>
+          <option value="hoje">Somente Hoje</option>
+        </select>
+      </div>
+      <div class="followup-list" id="followup-list"></div>
+    </section>
+
+    <section class="view" id="view-leads">
+      <div class="filter-bar">
+        <label>Estágio:</label>
+        <select id="leads-filter-stage" onchange="renderLeads()">
+          <option value="">Todos</option>
+        </select>
+        <label style="margin-left:1rem;">Origem:</label>
+        <select id="leads-filter-origem" onchange="renderLeads()">
+          <option value="">Todas</option>
+          <option value="Arquiteto">Arquiteto</option>
+          <option value="Indicação">Indicação</option>
+          <option value="Prospecção Ativa">Prospecção Ativa</option>
+        </select>
+      </div>
+      <div class="leads-table-wrap">
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th>Nome / Empresa</th>
+              <th>Telefone</th>
+              <th>Origem</th>
+              <th>Estágio</th>
+              <th>Metragem</th>
+              <th>Est. Custo</th>
+              <th>Retorno</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="leads-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-overlay" id="modal-overlay" onclick="closeLeadModal(event)">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-header">
+        <h2 id="modal-title">Novo Lead</h2>
+        <button class="modal-close" onclick="closeLeadModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <fieldset class="form-section">
+          <legend>Identificação</legend>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="f-nome">Nome *</label>
+              <input type="text" id="f-nome" required />
+            </div>
+            <div class="form-group">
+              <label for="f-empresa">Empresa</label>
+              <input type="text" id="f-empresa" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="f-telefone">Telefone *</label>
+              <input type="tel" id="f-telefone" required />
+            </div>
+            <div class="form-group">
+              <label for="f-origem">Origem *</label>
+              <select id="f-origem" required>
+                <option value="">Selecione…</option>
+                <option value="Arquiteto">Arquiteto</option>
+                <option value="Indicação">Indicação</option>
+                <option value="Prospecção Ativa">Prospecção Ativa</option>
+              </select>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset class="form-section">
+          <legend>Dados Técnicos</legend>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="f-metragem">Metragem (m²)</label>
+              <input type="number" id="f-metragem" />
+            </div>
+            <div class="form-group">
+              <label for="f-custo">Custo Estimado (R$)</label>
+              <input type="number" id="f-custo" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="f-tipo-obra">Tipo de Obra</label>
+            <select id="f-tipo-obra">
+              <option value="">Selecione…</option>
+              <option value="Clínica">Clínica</option>
+              <option value="Varejo">Varejo</option>
+              <option value="Corporativo">Corporativo</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+        </fieldset>
+        <fieldset class="form-section">
+          <legend>Funil</legend>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="f-estagio">Estágio *</label>
+              <select id="f-estagio" required></select>
+            </div>
+            <div class="form-group">
+              <label for="f-retorno">Data de Retorno</label>
+              <input type="date" id="f-retorno" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="f-notas">Notas</label>
+            <textarea id="f-notas" rows="3"></textarea>
+          </div>
+        </fieldset>
+      </div>
+      <div class="modal-footer">
+        <input type="hidden" id="f-lead-id" value="" />
+        <button class="btn-secondary" onclick="closeLeadModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveLead()">Salvar Lead</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="detail-overlay" onclick="closeDetailModal(event)">
+    <div class="modal modal-sm" role="dialog">
+      <div class="modal-header">
+        <h2 id="detail-title">Detalhes</h2>
+        <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="detail-body"></div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeDetailModal()">Fechar</button>
+        <button class="btn-primary" id="detail-edit-btn">Editar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="script.js"></script>
+</body>
+</html>
