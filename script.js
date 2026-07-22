@@ -413,3 +413,143 @@ function globalSearch(query) {
     }).join('');
     if (window.lucide) lucide.createIcons();
 }
+// ==========================================================
+// 🚀 INTEGRAÇÕES RÁPIDAS CORRIGIDAS (WHATSAPP, E-MAIL E CALENDÁRIO MULTI-PLATAFORMA)
+// ==========================================================
+
+function enviarWhatsApp(telefone, nome) {
+    if (!telefone) {
+        showToast("Lead sem telefone cadastrado.");
+        return;
+    }
+    const numLimpo = telefone.replace(/\D/g, '');
+    const mensagem = encodeURIComponent(`Olá ${nome}, tudo bem? Gostaria de dar sequência ao nosso atendimento!`);
+    window.open(`https://wa.me/55${numLimpo}?text=${mensagem}`, '_blank');
+}
+
+// E-mail corrigido: Abre o Gmail Web direto no navegador (ou Mailto como fallback)
+function enviarEmail(email, nome) {
+    if (!email || email === '-') {
+        showToast("Lead sem e-mail cadastrado!");
+        return;
+    }
+    const assunto = encodeURIComponent(`Acompanhamento - Atendimento ${nome}`);
+    const corpo = encodeURIComponent(`Olá ${nome},\n\nConforme combinado, estou entrando em contato para dar continuidade ao nosso atendimento.\n\nFico no aguardo!`);
+    
+    // Tenta abrir no Gmail Web diretamente
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${assunto}&body=${corpo}`;
+    window.open(gmailUrl, '_blank');
+}
+
+// Calendário Multi-Plataforma (Abre menu de escolha: Google, Apple, Notion, Outlook)
+async function adicionarAoCalendario(nome, dataRetorno) {
+    if (!dataRetorno) {
+        showToast("Sem data de retorno definida.");
+        return;
+    }
+
+    const dataFormatada = dataRetorno.replace(/-/g, ''); // Ex: 20260721
+    const titulo = `Follow-up - ${nome}`;
+    const detalhes = `Retornar contato com o lead ${nome}`;
+    
+    // Link do Google Calendar
+    const googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${dataFormatada}/${dataFormatada}&details=${encodeURIComponent(detalhes)}`;
+
+    // Criar o arquivo de evento universal (.ics) para Apple Calendar / Notion / Outlook
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SUMMARY:${titulo}
+DESCRIPTION:${detalhes}
+DTSTART;VALUE=DATE:${dataFormatada}
+END:VEVENT
+END:VCALENDAR`;
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const file = new File([blob], `Followup_${nome}.ics`, { type: 'text/calendar' });
+
+    // Se o navegador/celular suportar o menu de compartilhamento nativo (mostra Notion, Apple, etc.)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                title: titulo,
+                text: detalhes,
+                files: [file]
+            });
+            return;
+        } catch (err) {
+            // Se o usuário cancelar ou falhar, segue para a opção manual abaixo
+        }
+    }
+
+    // Se estiver no computador, abre o Google Agenda em nova aba E baixa o arquivo .ics para Apple/Notion
+    window.open(googleUrl, '_blank');
+    
+    // Baixa o .ics automaticamente para quem usa Notion / Apple / Outlook
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.setAttribute('download', `Followup_${nome}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast("Abrindo Google Agenda e baixando .ics para Notion/Apple!");
+}
+
+
+// ==========================================================
+// 🔔 RENDER FOLLOW-UP ATUALIZADO
+// ==========================================================
+
+function renderFollowup() {
+    const container = document.getElementById('followup-list');
+    const filter = document.getElementById('followup-filter').value;
+    const hoje = new Date().toISOString().split('T')[0];
+
+    let filtered = leads.filter(l => l.retorno);
+    if (filter === 'pendentes') filtered = filtered.filter(l => l.retorno <= hoje && l.estagio !== 'fechado');
+    if (filter === 'hoje') filtered = filtered.filter(l => l.retorno === hoje);
+
+    filtered.sort((a,b) => new Date(a.retorno) - new Date(b.retorno));
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<p class="empty-state">Sem retornos pendentes.</p>`;
+        return;
+    }
+
+    container.innerHTML = filtered.map(l => {
+        const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
+        return `
+            <div class="followup-item ${l.retorno < hoje ? 'overdue' : (l.retorno === hoje ? 'today' : 'future')}">
+                <div class="fu-info">
+                    <div class="fu-name">${l.nome}</div>
+                    <div class="fu-sub">${stageObj.label} | ${l.telefone}</div>
+                </div>
+                <div class="fu-date-wrap">
+                    <span class="fu-date">${formatDate(l.retorno)}</span>
+                </div>
+                <div class="fu-actions" style="display: flex; gap: 8px; align-items: center;">
+                    <!-- Botão WhatsApp -->
+                    <button class="btn-icon" title="Enviar WhatsApp" onclick="enviarWhatsApp('${l.telefone}', '${l.nome}')">
+                        <i data-lucide="message-square"></i>
+                    </button>
+                    
+                    <!-- Botão E-mail (Gmail Web) -->
+                    <button class="btn-icon" title="Enviar E-mail via Gmail" onclick="enviarEmail('${l.email}', '${l.nome}')">
+                        <i data-lucide="mail"></i>
+                    </button>
+                    
+                    <!-- Botão Salvar na Agenda (Google / Apple / Notion / ICS) -->
+                    <button class="btn-icon" title="Adicionar à Agenda (Google, Apple, Notion)" onclick="adicionarAoCalendario('${l.nome}', '${l.retorno}')">
+                        <i data-lucide="calendar"></i>
+                    </button>
+
+                    <!-- Botão de Editar / Retornar -->
+                    <button class="btn-primary" onclick="editLead('${l.id}')">Retornar</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (window.lucide) lucide.createIcons();
+}
