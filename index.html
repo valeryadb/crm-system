@@ -1,295 +1,434 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CRM System</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-
-  <!-- SIDEBAR NAVIGATION -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-logo">
-      <span class="logo-icon"><i data-lucide="building-2"></i></span>
-      <span class="logo-text">System<strong>CRM</strong></span>
-    </div>
-    <nav class="sidebar-nav">
-      <button class="nav-item active" onclick="showView('dashboard')" data-view="dashboard">
-        <i data-lucide="layout-dashboard"></i>
-        <span>Dashboard</span>
-      </button>
-      <button class="nav-item" onclick="showView('kanban')" data-view="kanban">
-        <i data-lucide="kanban"></i>
-        <span>Funil de Vendas</span>
-      </button>
-      <button class="nav-item" onclick="showView('followup')" data-view="followup">
-        <i data-lucide="bell"></i>
-        <span>Follow-up</span>
-        <span class="badge" id="followup-badge"></span>
-      </button>
-      <button class="nav-item" onclick="showView('leads')" data-view="leads">
-        <i data-lucide="users"></i>
-        <span>Leads</span>
-      </button>
-    </nav>
-    <div class="sidebar-footer">
-      <span class="version-tag">v1.0 — 2026</span>
-    </div>
-  </aside>
-
-  <!-- MAIN CONTENT AREA -->
-  <main class="main-content">
-    <header class="topbar">
-      <div class="topbar-left">
-        <h1 class="page-title" id="page-title">Dashboard</h1>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CRM System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <!-- Adicione a tag do Chart.js no <head> do seu index.html -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon"><i data-lucide="building-2"></i></span>
+        <span class="logo-text">System<strong>CRM</strong></span>
       </div>
-      <div class="topbar-right">
-        <div class="search-wrap">
-          <i data-lucide="search"></i>
-          <input type="text" id="global-search" placeholder="Buscar lead ou empresa..." oninput="globalSearch(this.value)" />
-        </div>
-        <button class="btn-primary" onclick="openLeadModal()">
-          <i data-lucide="plus"></i> Novo Lead
+      <nav class="sidebar-nav">
+        <button
+          class="nav-item active"
+          onclick="showView('dashboard')"
+          data-view="dashboard"
+        >
+          <i data-lucide="layout-dashboard"></i>
+          <span>Dashboard</span>
         </button>
+        <button
+          class="nav-item"
+          onclick="showView('kanban')"
+          data-view="kanban"
+        >
+          <i data-lucide="kanban"></i>
+          <span>Funil de Vendas</span>
+        </button>
+        <button
+          class="nav-item"
+          onclick="showView('followup')"
+          data-view="followup"
+        >
+          <i data-lucide="bell"></i>
+          <span>Follow-up</span>
+          <span class="badge" id="followup-badge"></span>
+        </button>
+        <button class="nav-item" onclick="showView('leads')" data-view="leads">
+          <i data-lucide="users"></i>
+          <span>Leads</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="version-tag">v1.0 — 2026</span>
       </div>
-    </header>
+    </aside>
 
-    <!-- VIEW 1: DASHBOARD -->
-    <section class="view active" id="view-dashboard">
-      <div class="kpi-grid">
-        <div class="kpi-card accent">
-          <div class="kpi-icon"><i data-lucide="handshake"></i></div>
-          <div class="kpi-info">
-            <span class="kpi-label">Em Negociação</span>
-            <span class="kpi-value" id="kpi-negociacao">0</span>
+    <!-- MAIN CONTENT AREA -->
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 class="page-title" id="page-title">Dashboard</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="search-wrap">
+            <i data-lucide="search"></i>
+            <input
+              type="text"
+              id="global-search"
+              placeholder="Buscar lead ou empresa..."
+              oninput="globalSearch(this.value)"
+            />
+          </div>
+          <button class="btn-primary" onclick="openLeadModal()">
+            <i data-lucide="plus"></i> Novo Lead
+          </button>
+        </div>
+      </header>
+
+      <!-- VIEW 1: DASHBOARD -->
+      <section class="view active" id="view-dashboard">
+        <!-- BARRA DE FILTROS DO DASHBOARD -->
+        <div
+          class="filter-bar"
+          style="
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+          "
+        >
+          <label for="dash-filter-origem">Filtrar Origem:</label>
+          <select id="dash-filter-origem" onchange="renderDashboard()">
+            <option value="">Todas as Origens</option>
+            <option value="instagram">Instagram / Redes Sociais</option>
+            <option value="indicacao">Indicação</option>
+            <option value="site">Site / Google</option>
+            <option value="evento">Evento / Prospectado</option>
+          </select>
+        </div>
+
+        <!-- CARDS DE KPIs ATUALIZADOS -->
+        <div class="kpi-grid">
+          <div class="kpi-card accent">
+            <div class="kpi-icon"><i data-lucide="handshake"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Em Negociação</span>
+              <span class="kpi-value" id="kpi-negociacao">0</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon"><i data-lucide="circle-dollar-sign"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Valor em Aberto</span>
+              <span class="kpi-value" id="kpi-valor-total">R$ 0</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon"><i data-lucide="trophy"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Contratos Fechados</span>
+              <span class="kpi-value" id="kpi-fechados">0</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon"><i data-lucide="percent"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Taxa de Conversão</span>
+              <span class="kpi-value" id="kpi-conversao">0%</span>
+            </div>
           </div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-icon"><i data-lucide="circle-dollar-sign"></i></div>
-          <div class="kpi-info">
-            <span class="kpi-label">Valor Total em Aberto</span>
-            <span class="kpi-value" id="kpi-valor-total">R$ 0</span>
+
+        <!-- CONTAINER DE GRÁFICOS INTERATIVOS -->
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 25px;
+          "
+        >
+          <div
+            style="
+              background: #1a1d26;
+              padding: 20px;
+              border-radius: 8px;
+              border: 1px solid #2a2d3d;
+            "
+          >
+            <h3 style="font-size: 1rem; color: #fff; margin-bottom: 15px">
+              Volume por Etapa do Funil
+            </h3>
+            <canvas id="chartFunil" style="max-height: 260px"></canvas>
+          </div>
+          <div
+            style="
+              background: #1a1d26;
+              padding: 20px;
+              border-radius: 8px;
+              border: 1px solid #2a2d3d;
+            "
+          >
+            <h3 style="font-size: 1rem; color: #fff; margin-bottom: 15px">
+              Receita em Aberto por Origem (R$)
+            </h3>
+            <canvas id="chartOrigem" style="max-height: 260px"></canvas>
           </div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-icon"><i data-lucide="trophy"></i></div>
-          <div class="kpi-info">
-            <span class="kpi-label">Contratos Fechados</span>
-            <span class="kpi-value" id="kpi-fechados">0</span>
-          </div>
+
+        <!-- ALERTAS DE FOLLOW-UP -->
+        <div class="section-header" style="margin-top: 2rem">
+          <h2 class="section-title">Alertas de Retorno — Hoje e Atrasados</h2>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-icon"><i data-lucide="alarm-clock"></i></div>
-          <div class="kpi-info">
-            <span class="kpi-label">Follow-ups Hoje</span>
-            <span class="kpi-value" id="kpi-followups">0</span>
-          </div>
+        <div class="alert-list" id="dashboard-alerts">
+          <p class="empty-state">Nenhum follow-up urgente pendente.</p>
         </div>
-      </div>
+      </section>
 
-      <div class="section-header">
-        <h2 class="section-title">Alertas de Retorno — Hoje e Atrasados</h2>
-      </div>
-      <div class="alert-list" id="dashboard-alerts">
-        <p class="empty-state">Nenhum follow-up urgente pendente.</p>
-      </div>
+      <!-- VIEW 2: KANBAN -->
+      <section class="view" id="view-kanban">
+        <div class="filter-bar">
+          <label for="kanban-filter-origem">Filtrar por Origem:</label>
+          <select id="kanban-filter-origem" onchange="renderKanban()">
+            <option value="">Todas</option>
+            <option value="instagram">Instagram / Redes Sociais</option>
+            <option value="indicacao">Indicação</option>
+            <option value="site">Site / Google</option>
+            <option value="evento">Evento / Prospectado</option>
+          </select>
+        </div>
+        <div class="kanban-board" id="kanban-board"></div>
+      </section>
 
-      <div class="section-header" style="margin-top: 2rem;">
-        <h2 class="section-title">Distribuição no Funil</h2>
-      </div>
-      <div class="funnel-summary" id="funnel-summary"></div>
-    </section>
+      <!-- VIEW 3: FOLLOW-UP -->
+      <section class="view" id="view-followup">
+        <div class="filter-bar">
+          <label for="followup-filter">Filtrar:</label>
+          <select id="followup-filter" onchange="renderFollowup()">
+            <option value="pendentes">Pendentes e Atrasados</option>
+            <option value="todos">Todos os Leads</option>
+            <option value="hoje">Somente Hoje</option>
+          </select>
+        </div>
+        <div class="followup-list" id="followup-list"></div>
+      </section>
 
-    <!-- VIEW 2: KANBAN -->
-    <section class="view" id="view-kanban">
-      <div class="filter-bar">
-        <label for="kanban-filter-origem">Filtrar por Origem:</label>
-        <select id="kanban-filter-origem" onchange="renderKanban()">
-          <option value="">Todas</option>
-          <option value="instagram">Instagram / Redes Sociais</option>
-          <option value="indicacao">Indicação</option>
-          <option value="site">Site / Google</option>
-          <option value="evento">Evento / Prospectado</option>
-        </select>
-      </div>
-      <div class="kanban-board" id="kanban-board"></div>
-    </section>
+      <!-- VIEW 4: LEADS TABLE -->
+      <section class="view" id="view-leads">
+        <div class="filter-bar">
+          <label for="leads-filter-stage">Estágio:</label>
+          <select id="leads-filter-stage" onchange="renderLeads()">
+            <option value="">Todos</option>
+          </select>
+          <label for="leads-filter-origem" style="margin-left: 1rem"
+            >Origem:</label
+          >
+          <select id="leads-filter-origem" onchange="renderLeads()">
+            <option value="">Todas</option>
+            <option value="instagram">Instagram / Redes Sociais</option>
+            <option value="indicacao">Indicação</option>
+            <option value="site">Site / Google</option>
+            <option value="evento">Evento / Prospectado</option>
+          </select>
+        </div>
+        <div class="leads-table-wrap">
+          <table class="leads-table">
+            <thead>
+              <tr>
+                <th>Cliente / Empresa</th>
+                <th>Contato / E-mail</th>
+                <th>Origem</th>
+                <th>Estágio</th>
+                <th>Valor Oportunidade</th>
+                <th>Retorno</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="leads-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
 
-    <!-- VIEW 3: FOLLOW-UP -->
-    <section class="view" id="view-followup">
-      <div class="filter-bar">
-        <label for="followup-filter">Filtrar:</label>
-        <select id="followup-filter" onchange="renderFollowup()">
-          <option value="pendentes">Pendentes e Atrasados</option>
-          <option value="todos">Todos os Leads</option>
-          <option value="hoje">Somente Hoje</option>
-        </select>
-      </div>
-      <div class="followup-list" id="followup-list"></div>
-    </section>
+    <!-- MODAL: CADASTRO E EDIÇÃO DE LEAD -->
+    <div
+      class="modal-overlay"
+      id="modal-overlay"
+      onclick="closeLeadModal(event)"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <div class="modal-header">
+          <h2 id="modal-title">Novo Lead</h2>
+          <button class="modal-close" onclick="closeLeadModal()">
+            &times;
+          </button>
+        </div>
+        <div class="modal-body">
+          <form
+            id="form-lead"
+            onsubmit="
+              event.preventDefault();
+              saveLead();
+            "
+          >
+            <fieldset class="form-section">
+              <legend>Identificação do Cliente</legend>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="f-nome">Nome Completo *</label>
+                  <input
+                    type="text"
+                    id="f-nome"
+                    placeholder="Ex: Carla Mendes"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="f-email">E-mail *</label>
+                  <input
+                    type="email"
+                    id="f-email"
+                    placeholder="carla@email.com"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="f-telefone">WhatsApp / Telefone *</label>
+                  <input
+                    type="tel"
+                    id="f-telefone"
+                    placeholder="(61) 99999-8888"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="f-empresa">Empresa / Organização</label>
+                  <input
+                    type="text"
+                    id="f-empresa"
+                    placeholder="Nome da empresa"
+                  />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="f-cargo">Cargo</label>
+                  <input
+                    type="text"
+                    id="f-cargo"
+                    placeholder="Ex: Gerente de Operações"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="f-nascimento">Data de Nascimento</label>
+                  <input type="date" id="f-nascimento" />
+                </div>
+              </div>
+            </fieldset>
 
-    <!-- VIEW 4: LEADS TABLE -->
-    <section class="view" id="view-leads">
-      <div class="filter-bar">
-        <label for="leads-filter-stage">Estágio:</label>
-        <select id="leads-filter-stage" onchange="renderLeads()">
-          <option value="">Todos</option>
-        </select>
-        <label for="leads-filter-origem" style="margin-left: 1rem;">Origem:</label>
-        <select id="leads-filter-origem" onchange="renderLeads()">
-          <option value="">Todas</option>
-          <option value="instagram">Instagram / Redes Sociais</option>
-          <option value="indicacao">Indicação</option>
-          <option value="site">Site / Google</option>
-          <option value="evento">Evento / Prospectado</option>
-        </select>
-      </div>
-      <div class="leads-table-wrap">
-        <table class="leads-table">
-          <thead>
-            <tr>
-              <th>Cliente / Empresa</th>
-              <th>Contato / E-mail</th>
-              <th>Origem</th>
-              <th>Estágio</th>
-              <th>Valor Oportunidade</th>
-              <th>Retorno</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody id="leads-tbody"></tbody>
-        </table>
-      </div>
-    </section>
-  </main>
+            <fieldset class="form-section">
+              <legend>Qualificação e Negócio</legend>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="f-origem">Origem *</label>
+                  <select id="f-origem" required>
+                    <option value="">Selecione...</option>
+                    <option value="instagram">Instagram / Redes Sociais</option>
+                    <option value="indicacao">Indicação</option>
+                    <option value="site">Site / Google</option>
+                    <option value="evento">Evento / Prospectado</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="f-porte">Porte da Empresa</label>
+                  <select id="f-porte">
+                    <option value="">Selecione...</option>
+                    <option value="autonomo">Autônomo / Individual</option>
+                    <option value="pequena">Pequena (1-10 func.)</option>
+                    <option value="media">Média (11-50 func.)</option>
+                    <option value="grande">Grande (+50 func.)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="f-custo">Valor da Oportunidade (R$)</label>
+                <input
+                  type="number"
+                  id="f-custo"
+                  placeholder="0.00"
+                  step="0.01"
+                />
+              </div>
+              <div class="form-group">
+                <label for="f-dor">Principal Necessidade / Dor</label>
+                <textarea
+                  id="f-dor"
+                  rows="2"
+                  placeholder="O que o cliente precisa resolver?"
+                ></textarea>
+              </div>
+            </fieldset>
 
-  <!-- MODAL: CADASTRO E EDIÇÃO DE LEAD -->
-  <div class="modal-overlay" id="modal-overlay" onclick="closeLeadModal(event)">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div class="modal-header">
-        <h2 id="modal-title">Novo Lead</h2>
-        <button class="modal-close" onclick="closeLeadModal()">&times;</button>
-      </div>
-      <div class="modal-body">
-        <form id="form-lead" onsubmit="event.preventDefault(); saveLead();">
-          
-          <fieldset class="form-section">
-            <legend>Identificação do Cliente</legend>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="f-nome">Nome Completo *</label>
-                <input type="text" id="f-nome" placeholder="Ex: Carla Mendes" required />
+            <fieldset class="form-section">
+              <legend>Status do Funil e Agendamento</legend>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="f-estagio">Estágio *</label>
+                  <select id="f-estagio" required></select>
+                </div>
+                <div class="form-group">
+                  <label for="f-retorno">Data de Retorno (Follow-up)</label>
+                  <input type="date" id="f-retorno" />
+                </div>
               </div>
               <div class="form-group">
-                <label for="f-email">E-mail *</label>
-                <input type="email" id="f-email" placeholder="carla@email.com" required />
+                <label for="f-notas">Notas / Histórico Inicial</label>
+                <textarea
+                  id="f-notas"
+                  rows="2"
+                  placeholder="Anotações da última reunião..."
+                ></textarea>
               </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="f-telefone">WhatsApp / Telefone *</label>
-                <input type="tel" id="f-telefone" placeholder="(61) 99999-8888" required />
-              </div>
-              <div class="form-group">
-                <label for="f-empresa">Empresa / Organização</label>
-                <input type="text" id="f-empresa" placeholder="Nome da empresa" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="f-cargo">Cargo</label>
-                <input type="text" id="f-cargo" placeholder="Ex: Gerente de Operações" />
-              </div>
-              <div class="form-group">
-                <label for="f-nascimento">Data de Nascimento</label>
-                <input type="date" id="f-nascimento" />
-              </div>
-            </div>
-          </fieldset>
+            </fieldset>
 
-          <fieldset class="form-section">
-            <legend>Qualificação e Negócio</legend>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="f-origem">Origem *</label>
-                <select id="f-origem" required>
-                  <option value="">Selecione...</option>
-                  <option value="instagram">Instagram / Redes Sociais</option>
-                  <option value="indicacao">Indicação</option>
-                  <option value="site">Site / Google</option>
-                  <option value="evento">Evento / Prospectado</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="f-porte">Porte da Empresa</label>
-                <select id="f-porte">
-                  <option value="">Selecione...</option>
-                  <option value="autonomo">Autônomo / Individual</option>
-                  <option value="pequena">Pequena (1-10 func.)</option>
-                  <option value="media">Média (11-50 func.)</option>
-                  <option value="grande">Grande (+50 func.)</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="f-custo">Valor da Oportunidade (R$)</label>
-              <input type="number" id="f-custo" placeholder="0.00" step="0.01" />
-            </div>
-            <div class="form-group">
-              <label for="f-dor">Principal Necessidade / Dor</label>
-              <textarea id="f-dor" rows="2" placeholder="O que o cliente precisa resolver?"></textarea>
-            </div>
-          </fieldset>
-
-          <fieldset class="form-section">
-            <legend>Status do Funil e Agendamento</legend>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="f-estagio">Estágio *</label>
-                <select id="f-estagio" required></select>
-              </div>
-              <div class="form-group">
-                <label for="f-retorno">Data de Retorno (Follow-up)</label>
-                <input type="date" id="f-retorno" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="f-notas">Notas / Histórico Inicial</label>
-              <textarea id="f-notas" rows="2" placeholder="Anotações da última reunião..."></textarea>
-            </div>
-          </fieldset>
-          
-          <input type="hidden" id="f-lead-id" value="" />
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeLeadModal()">Cancelar</button>
-        <button class="btn-primary" onclick="saveLead()">Salvar Lead</button>
+            <input type="hidden" id="f-lead-id" value="" />
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeLeadModal()">
+            Cancelar
+          </button>
+          <button class="btn-primary" onclick="saveLead()">Salvar Lead</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- MODAL: DETALHES DO LEAD (TIMELINE DE HISTÓRICO) -->
-  <div class="modal-overlay" id="detail-overlay" onclick="closeDetailModal(event)">
-    <div class="modal modal-sm" role="dialog">
-      <div class="modal-header">
-        <h2 id="detail-title">Detalhes</h2>
-        <button class="modal-close" onclick="closeDetailModal()">&times;</button>
-      </div>
-      <div class="modal-body" id="detail-body"></div>
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeDetailModal()">Fechar</button>
-        <button class="btn-primary" id="detail-edit-btn">Editar</button>
+    <!-- MODAL: DETALHES DO LEAD (TIMELINE DE HISTÓRICO) -->
+    <div
+      class="modal-overlay"
+      id="detail-overlay"
+      onclick="closeDetailModal(event)"
+    >
+      <div class="modal modal-sm" role="dialog">
+        <div class="modal-header">
+          <h2 id="detail-title">Detalhes</h2>
+          <button class="modal-close" onclick="closeDetailModal()">
+            &times;
+          </button>
+        </div>
+        <div class="modal-body" id="detail-body"></div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeDetailModal()">
+            Fechar
+          </button>
+          <button class="btn-primary" id="detail-edit-btn">Editar</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="toast" id="toast"></div>
-  <script src="script.js"></script>
-</body>
+    <div class="toast" id="toast"></div>
+    <script src="script.js"></script>
+  </body>
 </html>
