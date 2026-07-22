@@ -1,6 +1,6 @@
-/* 
-   LÓGICA DO CRM - PERSISTÊNCIA EM LOCALSTORAGE (JSON)
-    */
+/* ==========================================================
+   SYSTEM CRM - LÓGICA CORE, HISTÓRICO E GESTÃO DE LEADS
+   ========================================================== */
 
 const STAGES = [
     { id: 'prospeccao', label: 'Prospecção', color: '#7b8cde' },
@@ -11,7 +11,6 @@ const STAGES = [
     { id: 'perdido', label: 'Perdido', color: '#e05252' }
 ];
 
-// Lê o JSON do LocalStorage ao iniciar
 let leads = JSON.parse(localStorage.getItem('arq_crm_leads')) || [];
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -22,9 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
     updateFollowupBadge();
 });
 
+// ── NAVEGAÇÃO DE VIEWS ──────────────────────────────────────────────
+
 function showView(viewName) {
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
 
     const targetView = document.getElementById(`view-${viewName}`);
     if (targetView) targetView.classList.add('active');
@@ -35,7 +36,7 @@ function showView(viewName) {
     const titles = {
         'dashboard': 'Dashboard',
         'kanban': 'Funil de Vendas',
-        'followup': 'Follow-up',
+        'followup': 'Follow-up & Régua de Retorno',
         'leads': 'Gestão de Leads'
     };
     document.getElementById('page-title').innerText = titles[viewName];
@@ -48,52 +49,118 @@ function showView(viewName) {
     if (window.lucide) lucide.createIcons();
 }
 
-// ── KANBAN LOGIC ──────────────────
+// ── REGRAS DE NEGÓCIO: SLA E ANIVERSÁRIO ────────────────────────────
 
-function renderKanban() {
-    const board = document.getElementById('kanban-board');
-    if (!board) return;
-    const filtroOrigem = document.getElementById('kanban-filter-origem').value;
+function isBirthdayToday(birthDateStr) {
+    if (!birthDateStr) return false;
+    const today = new Date();
+    const [, month, day] = birthDateStr.split('-');
+    return (today.getMonth() + 1) === parseInt(month, 10) && today.getDate() === parseInt(day, 10);
+}
+
+function calculateSLAStatus(returnDateStr) {
+    if (!returnDateStr) return { label: 'Sem Agendamento', class: 'sla-neutral', days: 0 };
     
-    board.innerHTML = STAGES.map(stage => {
-        const stageLeads = leads.filter(l => l.estagio === stage.id && (!filtroOrigem || l.origem === filtroOrigem));
-        
-        return `
-            <div class="kanban-col" ondragover="allowDrop(event)" ondrop="drop(event, '${stage.id}')">
-                <div class="kanban-col-header">
-                    <span class="col-title"><span class="col-dot" style="background:${stage.color}"></span>${stage.label}</span>
-                    <span class="col-count">${stageLeads.length}</span>
-                </div>
-                <div class="kanban-cards">
-                    ${stageLeads.length === 0 ? '<p class="kanban-empty">Sem leads aqui</p>' : stageLeads.map(l => `
-                        <div class="lead-card" draggable="true" ondragstart="drag(event, '${l.id}')" onclick="openDetailModal('${l.id}')">
-                            <div class="card-name">${l.nome}</div>
-                            ${l.empresa ? `<div class="card-company">${l.empresa}</div>` : ''}
-                            <div class="card-meta">
-                                <span class="tag">${l.origem || 'Geral'}</span>
-                            </div>
-                            ${l.custo ? `<div class="card-cost">${formatCurrency(l.custo)}</div>` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    }).join('');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [year, month, day] = returnDateStr.split('-');
+    const targetDate = new Date(year, month - 1, day);
+    
+    const timeDiff = today - targetDate;
+    const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+    if (daysDiff === 0) return { label: 'Atender Hoje', class: 'sla-today', days: 0 };
+    if (daysDiff > 0 && daysDiff <= 1) return { label: 'Atrasado +24h', class: 'sla-warning', days: daysDiff };
+    if (daysDiff > 1 && daysDiff <= 7) return { label: `Atrasado ${daysDiff} dias`, class: 'sla-danger', days: daysDiff };
+    if (daysDiff > 7 && daysDiff <= 15) return { label: 'Sem contato +15 dias', class: 'sla-critical', days: daysDiff };
+    if (daysDiff > 15) return { label: 'Sem retorno (+30 dias)', class: 'sla-cold', days: daysDiff };
+
+    return { label: `Agendado (${formatDate(returnDateStr)})`, class: 'sla-ok', days: daysDiff };
 }
 
-function allowDrop(ev) { ev.preventDefault(); }
-function drag(ev, id) { ev.dataTransfer.setData("text", id); }
+// ── INTEGRAÇÕES DE COMUNICAÇÃO E AGENDA ────────────────────────────
 
-function drop(ev, stageId) {
-    ev.preventDefault();
-    const id = ev.dataTransfer.getData("text");
-    leads = leads.map(l => l.id === id ? { ...l, estagio: stageId } : l);
-    persist();
-    renderKanban();
-    showToast("Estágio atualizado!");
+function sendWhatsAppMessage(phone, name, customText = '') {
+    if (!phone) {
+        showToast("Lead sem telefone cadastrado.");
+        return;
+    }
+    const cleanPhone = phone.replace(/\D/g, '');
+    const defaultText = `Olá ${name}, tudo bem? Gostaria de dar sequência ao nosso atendimento.`;
+    const message = encodeURIComponent(customText || defaultText);
+    window.open(`https://wa.me/55${cleanPhone}?text=${message}`, '_blank');
 }
 
-// ── CRUD LEADS & PERSISTÊNCIA ───────────────────────────────
+function sendBirthdayMessage(phone, name) {
+    const message = `Parabéns, ${name}! A nossa equipe te deseja um feliz aniversário! Como presente, preparamos um cupom especial de desconto para você: NIVER10. Aproveite!`;
+    sendWhatsAppMessage(phone, name, message);
+}
+
+function sendPromoCoupon(phone, name, couponCode = 'PROMO10') {
+    const message = `Olá ${name}! Estamos com uma condição especial esta semana. Use o cupom ${couponCode} e garanta condições exclusivas em nosso atendimento.`;
+    sendWhatsAppMessage(phone, name, message);
+}
+
+function sendEmailGmail(email, name) {
+    if (!email) {
+        showToast("Lead sem e-mail cadastrado.");
+        return;
+    }
+    const subject = encodeURIComponent(`Acompanhamento - Atendimento ${name}`);
+    const body = encodeURIComponent(`Olá ${name},\n\nConforme combinado, estou entrando em contato para dar continuidade ao nosso processo.\n\nFico no aguardo!`);
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${subject}&body=${body}`;
+    window.open(gmailUrl, '_blank');
+}
+
+function scheduleGoogleCalendar(name, email, returnDateStr) {
+    if (!returnDateStr) {
+        showToast("Sem data de retorno definida.");
+        return;
+    }
+    const cleanDate = returnDateStr.replace(/-/g, '');
+    const startDate = `${cleanDate}T100000Z`;
+    const endDate = `${cleanDate}T110000Z`;
+    
+    const title = encodeURIComponent(`Reunião de Alinhamento - ${name}`);
+    const details = encodeURIComponent(`Reunião de acompanhamento agendada via CRM para o cliente ${name}.`);
+    
+    let googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}`;
+    if (email) {
+        googleUrl += `&add=${encodeURIComponent(email)}`;
+    }
+    window.open(googleUrl, '_blank');
+}
+
+function downloadICSInvite(name, email, returnDateStr) {
+    if (!returnDateStr) {
+        showToast("Sem data de retorno definida.");
+        return;
+    }
+    const cleanDate = returnDateStr.replace(/-/g, '');
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//SystemCRM//BR
+BEGIN:VEVENT
+SUMMARY:Reunião com ${name}
+DESCRIPTION:Acompanhamento comercial via SystemCRM.
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:MAILTO:${email || 'cliente@email.com'}
+DTSTART:${cleanDate}T100000Z
+DTEND:${cleanDate}T110000Z
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR`;
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.setAttribute('download', `Reuniao_${name}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Convite de agenda (.ics) baixado.");
+}
+
+// ── CRUD E PERSISTÊNCIA DOS LEADS ──────────────────────────────────
 
 function saveLead() {
     const id = document.getElementById('f-lead-id').value;
@@ -105,6 +172,20 @@ function saveLead() {
     if (!nome || !email || !telefone || !estagio) {
         showToast("Preencha os campos obrigatórios (*)");
         return;
+    }
+
+    const existingLead = leads.find(l => l.id === id);
+    const initialNotesText = document.getElementById('f-notas').value.trim();
+    
+    let historyArray = existingLead ? (existingLead.historicoNotas || []) : [];
+
+    // Se for um novo cadastro e tiver nota digitada, adiciona ao histórico
+    if (!existingLead && initialNotesText) {
+        historyArray.unshift({
+            id: Date.now().toString(),
+            texto: initialNotesText,
+            dataHora: new Date().toISOString()
+        });
     }
 
     const leadData = {
@@ -119,8 +200,9 @@ function saveLead() {
         custo: parseFloat(document.getElementById('f-custo').value) || 0,
         dor: document.getElementById('f-dor').value,
         estagio: estagio,
+        nascimento: document.getElementById('f-nascimento').value,
         retorno: document.getElementById('f-retorno').value,
-        notas: document.getElementById('f-notas').value,
+        historicoNotas: historyArray,
         updatedAt: new Date().toISOString()
     };
 
@@ -130,9 +212,9 @@ function saveLead() {
         leads.push(leadData);
     }
 
-    persist();
+    persistData();
     closeLeadModal();
-    showToast("Lead salvo com sucesso!");
+    showToast("Lead salvo com sucesso.");
     
     const activeNav = document.querySelector('.nav-item.active');
     const activeView = activeNav ? activeNav.getAttribute('data-view') : 'dashboard';
@@ -141,65 +223,95 @@ function saveLead() {
 
 function editLead(id) {
     closeDetailModal();
-    const l = leads.find(lead => lead.id === id);
-    if (!l) return;
+    const lead = leads.find(l => l.id === id);
+    if (!lead) return;
 
     document.getElementById('modal-title').innerText = "Editar Lead";
-    document.getElementById('f-lead-id').value = l.id;
-    document.getElementById('f-nome').value = l.nome || '';
-    document.getElementById('f-email').value = l.email || '';
-    document.getElementById('f-telefone').value = l.telefone || '';
-    document.getElementById('f-empresa').value = l.empresa || '';
-    document.getElementById('f-cargo').value = l.cargo || '';
-    document.getElementById('f-origem').value = l.origem || '';
-    document.getElementById('f-porte').value = l.porte || '';
-    document.getElementById('f-custo').value = l.custo || 0;
-    document.getElementById('f-dor').value = l.dor || '';
-    document.getElementById('f-estagio').value = l.estagio || 'prospeccao';
-    document.getElementById('f-retorno').value = l.retorno || '';
-    document.getElementById('f-notas').value = l.notas || '';
+    document.getElementById('f-lead-id').value = lead.id;
+    document.getElementById('f-nome').value = lead.nome || '';
+    document.getElementById('f-email').value = lead.email || '';
+    document.getElementById('f-telefone').value = lead.telefone || '';
+    document.getElementById('f-empresa').value = lead.empresa || '';
+    document.getElementById('f-cargo').value = lead.cargo || '';
+    document.getElementById('f-origem').value = lead.origem || '';
+    document.getElementById('f-porte').value = lead.porte || '';
+    document.getElementById('f-custo').value = lead.custo || 0;
+    document.getElementById('f-dor').value = lead.dor || '';
+    document.getElementById('f-estagio').value = lead.estagio || 'prospeccao';
+    document.getElementById('f-nascimento').value = lead.nascimento || '';
+    document.getElementById('f-retorno').value = lead.retorno || '';
+    document.getElementById('f-notas').value = '';
 
     document.getElementById('modal-overlay').classList.add('open');
 }
 
 function deleteLead(id) {
-    if (confirm("Excluir este cliente do CRM?")) {
+    if (confirm("Deseja realmente excluir este lead?")) {
         leads = leads.filter(l => l.id !== id);
-        persist();
+        persistData();
         const activeNav = document.querySelector('.nav-item.active');
         const activeView = activeNav ? activeNav.getAttribute('data-view') : 'dashboard';
         showView(activeView);
-        showToast("Removido com sucesso.");
+        showToast("Lead removido com sucesso.");
     }
 }
 
-// ── DASHBOARD & INDICADORES ──────────────────────────
+// ── REGISTRO DE NOTAS NA TIMELINE ──────────────────────────────────
+
+function adicionarNotaTimeline(leadId) {
+    const inputNota = document.getElementById('input-nova-nota');
+    if (!inputNota || !inputNota.value.trim()) {
+        showToast("Digite uma anotação antes de registrar.");
+        return;
+    }
+
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+
+    if (!lead.historicoNotas) {
+        lead.historicoNotas = [];
+    }
+
+    const novaNota = {
+        id: Date.now().toString(),
+        texto: inputNota.value.trim(),
+        dataHora: new Date().toISOString()
+    };
+
+    lead.historicoNotas.unshift(novaNota);
+
+    persistData();
+    inputNota.value = '';
+    openDetailModal(leadId);
+    showToast("Anotação registrada na timeline.");
+}
+
+// ── RENDERIZAÇÃO DAS TELAS ──────────────────────────────────────────
 
 function renderDashboard() {
-    const negociacao = leads.filter(l => ['prospeccao', 'visita', 'orcamento', 'negociacao'].includes(l.estagio));
-    const fechados = leads.filter(l => l.estagio === 'fechado');
-    const valorTotal = negociacao.reduce((acc, curr) => acc + curr.custo, 0);
+    const inNegotiation = leads.filter(l => ['prospeccao', 'visita', 'orcamento', 'negociacao'].includes(l.estagio));
+    const closedDeals = leads.filter(l => l.estagio === 'fechado');
+    const totalAmount = inNegotiation.reduce((acc, curr) => acc + curr.custo, 0);
 
-    document.getElementById('kpi-negociacao').innerText = negociacao.length;
-    document.getElementById('kpi-fechados').innerText = fechados.length;
-    document.getElementById('kpi-valor-total').innerText = formatCurrency(valorTotal);
+    document.getElementById('kpi-negociacao').innerText = inNegotiation.length;
+    document.getElementById('kpi-fechados').innerText = closedDeals.length;
+    document.getElementById('kpi-valor-total').innerText = formatCurrency(totalAmount);
 
-    const hoje = new Date().toISOString().split('T')[0];
-    const alertas = leads.filter(l => l.retorno && l.retorno <= hoje && l.estagio !== 'fechado' && l.estagio !== 'perdido');
-    
-    document.getElementById('kpi-followups').innerText = alertas.length;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const alerts = leads.filter(l => l.retorno && l.retorno <= todayStr && l.estagio !== 'fechado' && l.estagio !== 'perdido');
+    document.getElementById('kpi-followups').innerText = alerts.length;
 
-    const container = document.getElementById('dashboard-alerts');
-    if (alertas.length === 0) {
-        container.innerHTML = `<p class="empty-state">Tudo em dia!</p>`;
+    const alertsContainer = document.getElementById('dashboard-alerts');
+    if (alerts.length === 0) {
+        alertsContainer.innerHTML = `<p class="empty-state">Nenhum follow-up urgente pendente.</p>`;
     } else {
-        container.innerHTML = alertas.map(l => `
-            <div class="alert-item ${l.retorno < hoje ? 'overdue' : 'today'}">
+        alertsContainer.innerHTML = alerts.map(l => `
+            <div class="alert-item ${l.retorno < todayStr ? 'overdue' : 'today'}">
                 <div class="alert-info">
                     <span class="alert-name">${l.nome}</span>
                     <span class="alert-meta">${l.empresa || l.telefone}</span>
                 </div>
-                <span class="alert-date">${l.retorno < hoje ? 'ATRASADO' : 'HOJE'}</span>
+                <span class="alert-date">${l.retorno < todayStr ? 'ATRASADO' : 'HOJE'}</span>
                 <button class="btn-icon" onclick="editLead('${l.id}')"><i data-lucide="pencil"></i></button>
             </div>
         `).join('');
@@ -214,10 +326,107 @@ function renderDashboard() {
     if (window.lucide) lucide.createIcons();
 }
 
-// ── TABELA DE LEADS ──────────────────────────────
+function renderKanban() {
+    const board = document.getElementById('kanban-board');
+    if (!board) return;
+    const filterOrigem = document.getElementById('kanban-filter-origem').value;
+
+    board.innerHTML = STAGES.map(stage => {
+        const stageLeads = leads.filter(l => l.estagio === stage.id && (!filterOrigem || l.origem === filterOrigem));
+        return `
+            <div class="kanban-col" ondragover="allowDrop(event)" ondrop="drop(event, '${stage.id}')">
+                <div class="kanban-col-header">
+                    <span class="col-title"><span class="col-dot" style="background:${stage.color}"></span>${stage.label}</span>
+                    <span class="col-count">${stageLeads.length}</span>
+                </div>
+                <div class="kanban-cards">
+                    ${stageLeads.length === 0 ? '<p class="kanban-empty">Sem leads nesta etapa</p>' : stageLeads.map(l => `
+                        <div class="lead-card" draggable="true" ondragstart="drag(event, '${l.id}')" onclick="openDetailModal('${l.id}')">
+                            <div class="card-name">${l.nome} ${isBirthdayToday(l.nascimento) ? '(Aniversariante)' : ''}</div>
+                            ${l.empresa ? `<div class="card-company">${l.empresa}</div>` : ''}
+                            <div class="card-meta">
+                                <span class="tag">${l.origem || 'Geral'}</span>
+                            </div>
+                            ${l.custo ? `<div class="card-cost">${formatCurrency(l.custo)}</div>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderFollowup() {
+    const container = document.getElementById('followup-list');
+    const filter = document.getElementById('followup-filter').value;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    let filtered = leads.filter(l => l.retorno || l.nascimento);
+
+    if (filter === 'pendentes') filtered = filtered.filter(l => l.retorno <= todayStr && l.estagio !== 'fechado');
+    if (filter === 'hoje') filtered = filtered.filter(l => l.retorno === todayStr);
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<p class="empty-state">Nenhum follow-up pendente.</p>`;
+        return;
+    }
+
+    container.innerHTML = filtered.map(l => {
+        const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
+        const sla = calculateSLAStatus(l.retorno);
+        const hasBirthday = isBirthdayToday(l.nascimento);
+
+        return `
+            <div class="followup-item ${l.retorno < todayStr ? 'overdue' : (l.retorno === todayStr ? 'today' : 'future')}" style="padding: 15px; border-radius: 8px; margin-bottom: 12px; background: #1a1d26; display: flex; justify-content: space-between; align-items: center;">
+                <div class="fu-info">
+                    <div class="fu-name" style="font-weight: bold; font-size: 1.1rem; color: #fff;">
+                        ${l.nome} ${hasBirthday ? '<span style="font-size:0.8rem; background:#e8a94c; color:#000; padding:2px 6px; border-radius:4px; margin-left:8px;">ANIVERSÁRIO HOJE</span>' : ''}
+                    </div>
+                    <div class="fu-sub" style="color: #aaa; font-size: 0.9rem; margin-top: 4px;">
+                        ${stageObj.label} | ${l.telefone} | <span class="badge-sla ${sla.class}">${sla.label}</span>
+                    </div>
+                </div>
+
+                <div class="fu-actions" style="display: flex; gap: 8px; align-items: center;">
+                    ${hasBirthday ? `
+                        <button class="btn-primary" style="background:#e8a94c; color:#000;" title="Mandar Parabéns + Cupom" onclick="sendBirthdayMessage('${l.telefone}', '${l.nome}')">
+                            Mandar Parabéns
+                        </button>
+                    ` : ''}
+
+                    <button class="btn-icon" title="Enviar Cupom de Promoção" onclick="sendPromoCoupon('${l.telefone}', '${l.nome}', 'PROMO10')">
+                        <i data-lucide="tag"></i>
+                    </button>
+
+                    <button class="btn-icon" title="Enviar WhatsApp" onclick="sendWhatsAppMessage('${l.telefone}', '${l.nome}')">
+                        <i data-lucide="message-square"></i>
+                    </button>
+                    
+                    <button class="btn-icon" title="Enviar E-mail via Gmail" onclick="sendEmailGmail('${l.email}', '${l.nome}')">
+                        <i data-lucide="mail"></i>
+                    </button>
+
+                    <button class="btn-icon" title="Agendar Reunião no Google Calendar" onclick="scheduleGoogleCalendar('${l.nome}', '${l.email}', '${l.retorno}')">
+                        <i data-lucide="calendar"></i>
+                    </button>
+
+                    <button class="btn-icon" title="Baixar Convite .ICS (Apple/Notion/Outlook)" onclick="downloadICSInvite('${l.nome}', '${l.email}', '${l.retorno}')">
+                        <i data-lucide="download"></i>
+                    </button>
+
+                    <button class="btn-primary" onclick="editLead('${l.id}')">Atualizar Retorno</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (window.lucide) lucide.createIcons();
+}
 
 function renderLeads() {
     const tbody = document.getElementById('leads-tbody');
+    if (!tbody) return;
+
     const fStage = document.getElementById('leads-filter-stage').value;
     const fOrigem = document.getElementById('leads-filter-origem').value;
 
@@ -234,11 +443,11 @@ function renderLeads() {
         const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
         return `
             <tr>
-                <td><div class="td-name">${l.nome}</div><div class="td-company">${l.empresa || '-'}</div></td>
-                <td><div>${l.telefone}</div><small style="color:#888;">${l.email || '-'}</small></td>
+                <td><strong>${l.nome}</strong> ${isBirthdayToday(l.nascimento) ? '(Aniversariante)' : ''}<br><small style="color:#888;">${l.empresa || '-'}</small></td>
+                <td>${l.telefone}<br><small style="color:#888;">${l.email || '-'}</small></td>
                 <td>${l.origem || 'Geral'}</td>
-                <td><span class="stage-pill ${l.estagio}" style="background:${stageObj.color}22; color:${stageObj.color}; padding:4px 8px; border-radius:4px;">${stageObj.label}</span></td>
-                <td class="td-cost">${formatCurrency(l.custo)}</td>
+                <td><span style="background:${stageObj.color}22; color:${stageObj.color}; padding:4px 8px; border-radius:4px;">${stageObj.label}</span></td>
+                <td>${formatCurrency(l.custo)}</td>
                 <td>${l.retorno ? formatDate(l.retorno) : '-'}</td>
                 <td>
                     <div class="td-actions">
@@ -249,48 +458,30 @@ function renderLeads() {
             </tr>
         `;
     }).join('');
+
     if (window.lucide) lucide.createIcons();
 }
 
-// ── FOLLOW-UP ──────────────────────────
+// ── DRAG AND DROP KANBAN ────────────────────────────────────────────
 
-function renderFollowup() {
-    const container = document.getElementById('followup-list');
-    const filter = document.getElementById('followup-filter').value;
-    const hoje = new Date().toISOString().split('T')[0];
-
-    let filtered = leads.filter(l => l.retorno);
-    if (filter === 'pendentes') filtered = filtered.filter(l => l.retorno <= hoje && l.estagio !== 'fechado');
-    if (filter === 'hoje') filtered = filtered.filter(l => l.retorno === hoje);
-
-    filtered.sort((a,b) => new Date(a.retorno) - new Date(b.retorno));
-
-    if (filtered.length === 0) {
-        container.innerHTML = `<p class="empty-state">Sem retornos pendentes.</p>`;
-        return;
-    }
-
-    container.innerHTML = filtered.map(l => {
-        const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
-        return `
-            <div class="followup-item ${l.retorno < hoje ? 'overdue' : (l.retorno === hoje ? 'today' : 'future')}">
-                <div class="fu-info">
-                    <div class="fu-name">${l.nome}</div>
-                    <div class="fu-sub">${stageObj.label} | ${l.telefone}</div>
-                </div>
-                <div class="fu-date-wrap">
-                    <span class="fu-date">${formatDate(l.retorno)}</span>
-                </div>
-                <div class="fu-actions">
-                    <button class="btn-primary" onclick="editLead('${l.id}')">Retornar</button>
-                </div>
-            </div>
-        `;
-    }).join('');
-    if (window.lucide) lucide.createIcons();
+function allowDrop(event) {
+    event.preventDefault();
 }
 
-// ── CONTROLE DOS MODAIS ────────────────────────────
+function drag(event, id) {
+    event.dataTransfer.setData("text", id);
+}
+
+function drop(event, stageId) {
+    event.preventDefault();
+    const id = event.dataTransfer.getData("text");
+    leads = leads.map(l => l.id === id ? { ...l, estagio: stageId } : l);
+    persistData();
+    renderKanban();
+    showToast("Estágio atualizado.");
+}
+
+// ── CONTROLE DE MODAIS E TIMELINE ────────────────────────────────────
 
 function openLeadModal() {
     document.getElementById('modal-title').innerText = "Novo Lead";
@@ -299,51 +490,89 @@ function openLeadModal() {
     document.getElementById('modal-overlay').classList.add('open');
 }
 
-function closeLeadModal(e) {
-    if (!e || e.target.id === 'modal-overlay' || e.target.className === 'modal-close' || e.target.className === 'btn-secondary') {
+function closeLeadModal(event) {
+    if (!event || event.target.id === 'modal-overlay' || event.target.className === 'modal-close' || event.target.className === 'btn-secondary') {
         document.getElementById('modal-overlay').classList.remove('open');
     }
 }
 
 function openDetailModal(id) {
-    const l = leads.find(lead => lead.id === id);
-    if (!l) return;
-    const body = document.getElementById('detail-body');
-    const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
+    const lead = leads.find(l => l.id === id);
+    if (!lead) return;
 
-    document.getElementById('detail-title').innerText = l.nome;
+    const body = document.getElementById('detail-body');
+    const stageObj = STAGES.find(s => s.id === lead.estagio) || STAGES[0];
+    const historico = lead.historicoNotas || [];
+
+    document.getElementById('detail-title').innerText = lead.nome;
     body.innerHTML = `
-        <div class="detail-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
-            <div class="detail-item"><strong>E-mail:</strong> ${l.email || '-'}</div>
-            <div class="detail-item"><strong>Telefone:</strong> ${l.telefone || '-'}</div>
-            <div class="detail-item"><strong>Empresa:</strong> ${l.empresa || '-'}</div>
-            <div class="detail-item"><strong>Estágio:</strong> ${stageObj.label}</div>
-            <div class="detail-item"><strong>Investimento:</strong> ${formatCurrency(l.custo)}</div>
-            <div class="detail-item"><strong>Porte:</strong> ${l.porte || '-'}</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px; font-size:0.9rem;">
+            <div><strong>E-mail:</strong> ${lead.email || '-'}</div>
+            <div><strong>Telefone:</strong> ${lead.telefone || '-'}</div>
+            <div><strong>Empresa:</strong> ${lead.empresa || '-'}</div>
+            <div><strong>Estágio:</strong> ${stageObj.label}</div>
+            <div><strong>Valor Oportunidade:</strong> ${formatCurrency(lead.custo)}</div>
+            <div><strong>Nascimento:</strong> ${lead.nascimento ? formatDate(lead.nascimento) : '-'}</div>
         </div>
-        <div><strong>Dor do Cliente:</strong> <p>${l.dor || 'Não informada.'}</p></div>
-        <div><strong>Notas:</strong> <p>${l.notas || 'Sem notas.'}</p></div>
+
+        <div style="margin-bottom:15px;">
+            <strong>Principal Dor / Necessidade:</strong>
+            <p style="margin-top:4px; color:#ccc; font-size:0.9rem;">${lead.dor || 'Não informada.'}</p>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #2a2d3d; margin: 15px 0;">
+
+        <!-- ÁREA DE REGISTRO DE NOTA NA TIMELINE -->
+        <div style="margin-bottom:20px;">
+            <label style="font-weight:bold; font-size:0.9rem; display:block; margin-bottom:6px;">Adicionar Nota ao Histórico</label>
+            <div style="display:flex; gap:8px;">
+                <input type="text" id="input-nova-nota" placeholder="Ex: Cliente pediu reunião na quinta-feira..." style="flex:1; padding:8px 12px; background:#12141d; border:1px solid #2a2d3d; color:#fff; border-radius:6px;">
+                <button class="btn-primary" onclick="adicionarNotaTimeline('${lead.id}')">Registrar</button>
+            </div>
+        </div>
+
+        <!-- TIMELINE DE INTERAÇÕES -->
+        <div>
+            <strong style="font-size:0.95rem; display:block; margin-bottom:12px;">Histórico de Interações (Timeline)</strong>
+            ${historico.length === 0 ? '<p style="color:#777; font-size:0.85rem;">Nenhuma nota registrada até o momento.</p>' : `
+                <div class="timeline-container" style="border-left: 2px solid #2a2d3d; padding-left: 15px; margin-left: 5px;">
+                    ${historico.map(nota => {
+                        const dataFormatada = new Date(nota.dataHora).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                        return `
+                            <div class="timeline-item" style="position:relative; margin-bottom: 15px;">
+                                <div style="position:absolute; left:-21px; top:3px; width:10px; height:10px; border-radius:50%; background:#4c8ce8;"></div>
+                                <div style="font-size:0.75rem; color:#888;">${dataFormatada}</div>
+                                <div style="font-size:0.9rem; color:#eee; margin-top:2px; background:#12141d; padding:8px 12px; border-radius:6px; border:1px solid #2a2d3d;">
+                                    ${nota.texto}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `}
+        </div>
     `;
-    document.getElementById('detail-edit-btn').onclick = () => editLead(l.id);
+
+    document.getElementById('detail-edit-btn').onclick = () => editLead(lead.id);
     document.getElementById('detail-overlay').classList.add('open');
 }
 
-function closeDetailModal(e) {
-    if (!e || e.target.id === 'detail-overlay' || e.target.className === 'modal-close' || e.target.className === 'btn-secondary') {
+function closeDetailModal(event) {
+    if (!event || event.target.id === 'detail-overlay' || event.target.className === 'modal-close' || event.target.className === 'btn-secondary') {
         document.getElementById('detail-overlay').classList.remove('open');
     }
 }
 
-// ── HELPERS & PERSISTÊNCIA ───────────────────────────────────
+// ── UTILITÁRIOS E PERSISTÊNCIA ──────────────────────────────────────
 
-function persist() {
+function persistData() {
     localStorage.setItem('arq_crm_leads', JSON.stringify(leads));
     updateFollowupBadge();
 }
 
 function updateFollowupBadge() {
-    const hoje = new Date().toISOString().split('T')[0];
-    const count = leads.filter(l => l.retorno && l.retorno <= hoje && l.estagio !== 'fechado' && l.estagio !== 'perdido').length;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const count = leads.filter(l => l.retorno && l.retorno <= todayStr && l.estagio !== 'fechado' && l.estagio !== 'perdido').length;
     const badge = document.getElementById('followup-badge');
     if (badge) {
         badge.innerText = count;
@@ -357,8 +586,8 @@ function formatCurrency(val) {
 
 function formatDate(dateStr) {
     if (!dateStr) return '-';
-    const [y, m, d] = dateStr.split('-');
-    return `${d}/${m}/${y}`;
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
 }
 
 function initModalSelectors() {
@@ -376,11 +605,11 @@ function initFilters() {
 }
 
 function showToast(msg) {
-    const t = document.getElementById('toast');
-    if (!t) return;
-    t.innerText = msg; 
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3000);
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.innerText = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
 function globalSearch(query) {
@@ -398,7 +627,7 @@ function globalSearch(query) {
         const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
         return `
             <tr>
-                <td><div class="td-name">${l.nome}</div><div class="td-company">${l.empresa || '-'}</div></td>
+                <td><strong>${l.nome}</strong><br><small style="color:#888;">${l.empresa || '-'}</small></td>
                 <td>${l.telefone}</td>
                 <td>${l.origem || 'Geral'}</td>
                 <td>${stageObj.label}</td>
@@ -411,149 +640,5 @@ function globalSearch(query) {
             </tr>
         `;
     }).join('');
-    if (window.lucide) lucide.createIcons();
-}
-// ==========================================================
-// 🚀 INTEGRAÇÕES RÁPIDAS CORRIGIDAS (EMAIL & CALENDÁRIO)
-// ==========================================================
-
-function enviarWhatsApp(telefone, nome) {
-    if (!telefone) {
-        showToast("Lead sem telefone cadastrado.");
-        return;
-    }
-    const numLimpo = telefone.replace(/\D/g, '');
-    const mensagem = encodeURIComponent(`Olá ${nome}, tudo bem? Gostaria de dar sequência ao nosso atendimento!`);
-    window.open(`https://wa.me/55${numLimpo}?text=${mensagem}`, '_blank');
-}
-
-function enviarEmail(email, nome) {
-    if (!email) {
-        showToast("Lead sem e-mail cadastrado.");
-        return;
-    }
-    const assunto = encodeURIComponent(`Acompanhamento - Atendimento ${nome}`);
-    const corpo = encodeURIComponent(`Olá ${nome},\n\nConforme combinado, estou entrando em contato para dar continuidade ao nosso processo.\n\nFico no aguardo!`);
-    
-    // Abre a tela de composição do Gmail Web direto no navegador (Garantido de funcionar)
-    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${assunto}&body=${corpo}`;
-    window.open(gmailUrl, '_blank');
-}
-
-// Cria uma Reunião/Convite no Google Calendar e convida o cliente por e-mail
-function agendarReuniaoGoogle(nome, email, dataRetorno) {
-    if (!dataRetorno) {
-        showToast("Sem data de retorno definida.");
-        return;
-    }
-    
-    // Formata a data (YYYYMMDD) para o padrão do Google
-    const dataClean = dataRetorno.replace(/-/g, '');
-    const dataInicio = `${dataClean}T100000Z`; // Ex: 10:00 AM UTC
-    const dataFim = `${dataClean}T110000Z`;    // Ex: 11:00 AM UTC
-    
-    const titulo = encodeURIComponent(`Reunião de Alinhamento - ${nome}`);
-    const detalhes = encodeURIComponent(`Reunião de acompanhamento e apresentação agendada via CRM para o cliente ${nome}.`);
-    
-    // add= adiciona o e-mail do lead como Convidado (Gera o convite oficial)
-    let googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${titulo}&dates=${dataInicio}/${dataFim}&details=${detalhes}`;
-    if (email) {
-        googleUrl += `&add=${encodeURIComponent(email)}`;
-    }
-    
-    window.open(googleUrl, '_blank');
-}
-
-// Gera arquivo .ICS universal (Funciona para Apple Calendar, Outlook e Notion Calendar)
-function baixarEventoICS(nome, email, dataRetorno) {
-    if (!dataRetorno) {
-        showToast("Sem data de retorno definida.");
-        return;
-    }
-    const dataClean = dataRetorno.replace(/-/g, '');
-    
-    const icsData = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//SystemCRM//BR
-BEGIN:VEVENT
-SUMMARY:Reunião com ${nome}
-DESCRIPTION:Acompanhamento comercial via SystemCRM.
-ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:MAILTO:${email || 'cliente@email.com'}
-DTSTART:${dataClean}T100000Z
-DTEND:${dataClean}T110000Z
-STATUS:CONFIRMED
-END:VEVENT
-END:VCALENDAR`;
-
-    const blob = new Blob([icsData], { type: 'text/calendar;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = window.URL.createObjectURL(blob);
-    link.setAttribute('download', `Reuniao_${nome}.ics`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast("Convite de agenda (.ics) baixado!");
-}
-
-
-// ==========================================================
-// 🔔 RENDER FOLLOW-UP
-// ==========================================================
-
-function renderFollowup() {
-    const container = document.getElementById('followup-list');
-    const filter = document.getElementById('followup-filter').value;
-    const hoje = new Date().toISOString().split('T')[0];
-
-    let filtered = leads.filter(l => l.retorno);
-    if (filter === 'pendentes') filtered = filtered.filter(l => l.retorno <= hoje && l.estagio !== 'fechado');
-    if (filter === 'hoje') filtered = filtered.filter(l => l.retorno === hoje);
-
-    filtered.sort((a,b) => new Date(a.retorno) - new Date(b.retorno));
-
-    if (filtered.length === 0) {
-        container.innerHTML = `<p class="empty-state">Sem retornos pendentes.</p>`;
-        return;
-    }
-
-    container.innerHTML = filtered.map(l => {
-        const stageObj = STAGES.find(s => s.id === l.estagio) || STAGES[0];
-        return `
-            <div class="followup-item ${l.retorno < hoje ? 'overdue' : (l.retorno === hoje ? 'today' : 'future')}">
-                <div class="fu-info">
-                    <div class="fu-name">${l.nome}</div>
-                    <div class="fu-sub">${stageObj.label} | ${l.telefone} ${l.email ? '| ' + l.email : ''}</div>
-                </div>
-                <div class="fu-date-wrap">
-                    <span class="fu-date">${formatDate(l.retorno)}</span>
-                </div>
-                <div class="fu-actions" style="display: flex; gap: 8px; align-items: center;">
-                    <!-- Clique Rápido WhatsApp -->
-                    <button class="btn-icon" title="Enviar WhatsApp" onclick="enviarWhatsApp('${l.telefone}', '${l.nome}')">
-                        <i data-lucide="message-square"></i>
-                    </button>
-                    
-                    <!-- Abrir Gmail com E-mail preenchido -->
-                    <button class="btn-icon" title="Enviar E-mail pelo Gmail" onclick="enviarEmail('${l.email}', '${l.nome}')">
-                        <i data-lucide="mail"></i>
-                    </button>
-                    
-                    <!-- Convidar para Reunião no Google Calendar (Com o e-mail do lead convidado) -->
-                    <button class="btn-icon" title="Convidar para Reunião (Google Calendar)" onclick="agendarReuniaoGoogle('${l.nome}', '${l.email}', '${l.retorno}')">
-                        <i data-lucide="calendar"></i>
-                    </button>
-
-                    <!-- Baixar .ICS (Para Apple Calendar, Outlook e Notion Calendar) -->
-                    <button class="btn-icon" title="Baixar Convite .ICS (Apple/Notion/Outlook)" onclick="baixarEventoICS('${l.nome}', '${l.email}', '${l.retorno}')">
-                        <i data-lucide="download"></i>
-                    </button>
-
-                    <!-- Botão de Editar / Retornar -->
-                    <button class="btn-primary" onclick="editLead('${l.id}')">Retornar</button>
-                </div>
-            </div>
-        `;
-    }).join('');
-
     if (window.lucide) lucide.createIcons();
 }

@@ -12,6 +12,7 @@
 </head>
 <body>
 
+  <!-- SIDEBAR NAVIGATION -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <span class="logo-icon"><i data-lucide="building-2"></i></span>
@@ -41,6 +42,7 @@
     </div>
   </aside>
 
+  <!-- MAIN CONTENT AREA -->
   <main class="main-content">
     <header class="topbar">
       <div class="topbar-left">
@@ -49,7 +51,7 @@
       <div class="topbar-right">
         <div class="search-wrap">
           <i data-lucide="search"></i>
-          <input type="text" id="global-search" placeholder="Buscar lead ou empresa…" oninput="globalSearch(this.value)" />
+          <input type="text" id="global-search" placeholder="Buscar lead ou empresa..." oninput="globalSearch(this.value)" />
         </div>
         <button class="btn-primary" onclick="openLeadModal()">
           <i data-lucide="plus"></i> Novo Lead
@@ -94,7 +96,7 @@
         <h2 class="section-title">Alertas de Retorno — Hoje e Atrasados</h2>
       </div>
       <div class="alert-list" id="dashboard-alerts">
-        <p class="empty-state">Nenhum follow-up urgente. Boa sorte!</p>
+        <p class="empty-state">Nenhum follow-up urgente pendente.</p>
       </div>
 
       <div class="section-header" style="margin-top: 2rem;">
@@ -106,7 +108,7 @@
     <!-- VIEW 2: KANBAN -->
     <section class="view" id="view-kanban">
       <div class="filter-bar">
-        <label>Filtrar por Origem:</label>
+        <label for="kanban-filter-origem">Filtrar por Origem:</label>
         <select id="kanban-filter-origem" onchange="renderKanban()">
           <option value="">Todas</option>
           <option value="instagram">Instagram / Redes Sociais</option>
@@ -121,7 +123,7 @@
     <!-- VIEW 3: FOLLOW-UP -->
     <section class="view" id="view-followup">
       <div class="filter-bar">
-        <label>Filtrar:</label>
+        <label for="followup-filter">Filtrar:</label>
         <select id="followup-filter" onchange="renderFollowup()">
           <option value="pendentes">Pendentes e Atrasados</option>
           <option value="todos">Todos os Leads</option>
@@ -134,11 +136,11 @@
     <!-- VIEW 4: LEADS TABLE -->
     <section class="view" id="view-leads">
       <div class="filter-bar">
-        <label>Estágio:</label>
+        <label for="leads-filter-stage">Estágio:</label>
         <select id="leads-filter-stage" onchange="renderLeads()">
           <option value="">Todos</option>
         </select>
-        <label style="margin-left:1rem;">Origem:</label>
+        <label for="leads-filter-origem" style="margin-left: 1rem;">Origem:</label>
         <select id="leads-filter-origem" onchange="renderLeads()">
           <option value="">Todas</option>
           <option value="instagram">Instagram / Redes Sociais</option>
@@ -166,7 +168,7 @@
     </section>
   </main>
 
-  <!-- MODAL DE CADASTRO/EDIÇÃO DE LEAD -->
+  <!-- MODAL: CADASTRO E EDIÇÃO DE LEAD -->
   <div class="modal-overlay" id="modal-overlay" onclick="closeLeadModal(event)">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div class="modal-header">
@@ -175,8 +177,9 @@
       </div>
       <div class="modal-body">
         <form id="form-lead" onsubmit="event.preventDefault(); saveLead();">
+          
           <fieldset class="form-section">
-            <legend>👤 Identificação do Cliente</legend>
+            <legend>Identificação do Cliente</legend>
             <div class="form-row">
               <div class="form-group">
                 <label for="f-nome">Nome Completo *</label>
@@ -194,22 +197,28 @@
               </div>
               <div class="form-group">
                 <label for="f-empresa">Empresa / Organização</label>
-                <input type="text" id="f-empresa" placeholder="Nome da Empresa" />
+                <input type="text" id="f-empresa" placeholder="Nome da empresa" />
               </div>
             </div>
-            <div class="form-group">
-              <label for="f-cargo">Cargo</label>
-              <input type="text" id="f-cargo" placeholder="Ex: Gerente de Operações" />
+            <div class="form-row">
+              <div class="form-group">
+                <label for="f-cargo">Cargo</label>
+                <input type="text" id="f-cargo" placeholder="Ex: Gerente de Operações" />
+              </div>
+              <div class="form-group">
+                <label for="f-nascimento">Data de Nascimento</label>
+                <input type="date" id="f-nascimento" />
+              </div>
             </div>
           </fieldset>
 
           <fieldset class="form-section">
-            <legend>🎯 Qualificação e Negócio</legend>
+            <legend>Qualificação e Negócio</legend>
             <div class="form-row">
               <div class="form-group">
                 <label for="f-origem">Origem *</label>
                 <select id="f-origem" required>
-                  <option value="">Selecione…</option>
+                  <option value="">Selecione...</option>
                   <option value="instagram">Instagram / Redes Sociais</option>
                   <option value="indicacao">Indicação</option>
                   <option value="site">Site / Google</option>
@@ -219,7 +228,7 @@
               <div class="form-group">
                 <label for="f-porte">Porte da Empresa</label>
                 <select id="f-porte">
-                  <option value="">Selecione…</option>
+                  <option value="">Selecione...</option>
                   <option value="autonomo">Autônomo / Individual</option>
                   <option value="pequena">Pequena (1-10 func.)</option>
                   <option value="media">Média (11-50 func.)</option>
@@ -238,7 +247,7 @@
           </fieldset>
 
           <fieldset class="form-section">
-            <legend>📊 Status do Funil e Agendamento</legend>
+            <legend>Status do Funil e Agendamento</legend>
             <div class="form-row">
               <div class="form-group">
                 <label for="f-estagio">Estágio *</label>
@@ -250,7 +259,7 @@
               </div>
             </div>
             <div class="form-group">
-              <label for="f-notas">Notas / Histórico</label>
+              <label for="f-notas">Notas / Histórico Inicial</label>
               <textarea id="f-notas" rows="2" placeholder="Anotações da última reunião..."></textarea>
             </div>
           </fieldset>
@@ -265,7 +274,7 @@
     </div>
   </div>
 
-  <!-- MODAL DE DETALHES -->
+  <!-- MODAL: DETALHES DO LEAD (TIMELINE DE HISTÓRICO) -->
   <div class="modal-overlay" id="detail-overlay" onclick="closeDetailModal(event)">
     <div class="modal modal-sm" role="dialog">
       <div class="modal-header">
