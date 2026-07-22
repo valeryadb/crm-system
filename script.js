@@ -1,5 +1,5 @@
 /* ==========================================================
-   SYSTEM CRM - LÓGICA CORE, HISTÓRICO E GESTÃO DE LEADS
+   SYSTEM CRM - LÓGICA CORE, HISTÓRICO, DASHBOARD E LEADS
    ========================================================== */
 
 const STAGES = [
@@ -12,6 +12,10 @@ const STAGES = [
 ];
 
 let leads = JSON.parse(localStorage.getItem("arq_crm_leads")) || [];
+
+// Instâncias dos gráficos para o Chart.js
+let chartFunilInstance = null;
+let chartOrigemInstance = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   if (window.lucide) lucide.createIcons();
@@ -43,7 +47,9 @@ function showView(viewName) {
     followup: "Follow-up & Régua de Retorno",
     leads: "Gestão de Leads",
   };
-  document.getElementById("page-title").innerText = titles[viewName];
+
+  const pageTitleEl = document.getElementById("page-title");
+  if (pageTitleEl) pageTitleEl.innerText = titles[viewName];
 
   if (viewName === "dashboard") renderDashboard();
   if (viewName === "kanban") renderKanban();
@@ -137,7 +143,7 @@ function sendEmailGmail(email, name) {
   }
   const subject = encodeURIComponent(`Acompanhamento - Atendimento ${name}`);
   const body = encodeURIComponent(
-    `Olá ${name},\n\nConforme combinado, estou entrando em contato para dar continuidade ao nosso processo.\n\nFico no aguardo!`,
+    `Olá ${name},\n\nConforme combinado, estou entrando em contato para dar continuidade ao nosso processo.\n\nFico no aguardo!`
   );
   const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${subject}&body=${body}`;
   window.open(gmailUrl, "_blank");
@@ -154,7 +160,7 @@ function scheduleGoogleCalendar(name, email, returnDateStr) {
 
   const title = encodeURIComponent(`Reunião de Alinhamento - ${name}`);
   const details = encodeURIComponent(
-    `Reunião de acompanhamento agendada via CRM para o cliente ${name}.`,
+    `Reunião de acompanhamento agendada via CRM para o cliente ${name}.`
   );
 
   let googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}`;
@@ -212,7 +218,6 @@ function saveLead() {
 
   let historyArray = existingLead ? existingLead.historicoNotas || [] : [];
 
-  // Se for um novo cadastro e tiver nota digitada, adiciona ao histórico
   if (!existingLead && initialNotesText) {
     historyArray.unshift({
       id: Date.now().toString(),
@@ -323,37 +328,61 @@ function adicionarNotaTimeline(leadId) {
   showToast("Anotação registrada na timeline.");
 }
 
-// ── RENDERIZAÇÃO DAS TELAS ──────────────────────────────────────────
+// ── RENDERIZAÇÃO DO DASHBOARD E GRÁFICOS ────────────────────────────
 
 function renderDashboard() {
-  const inNegotiation = leads.filter((l) =>
-    ["prospeccao", "visita", "orcamento", "negociacao"].includes(l.estagio),
+  const filterOrigemEl = document.getElementById("dash-filter-origem");
+  const filterOrigem = filterOrigemEl ? filterOrigemEl.value : "";
+
+  let filteredLeads = leads;
+  if (filterOrigem) {
+    filteredLeads = leads.filter((l) => l.origem === filterOrigem);
+  }
+
+  const inNegotiation = filteredLeads.filter((l) =>
+    ["prospeccao", "visita", "orcamento", "negociacao"].includes(l.estagio)
   );
-  const closedDeals = leads.filter((l) => l.estagio === "fechado");
+  const closedDeals = filteredLeads.filter((l) => l.estagio === "fechado");
   const totalAmount = inNegotiation.reduce((acc, curr) => acc + curr.custo, 0);
 
-  document.getElementById("kpi-negociacao").innerText = inNegotiation.length;
-  document.getElementById("kpi-fechados").innerText = closedDeals.length;
-  document.getElementById("kpi-valor-total").innerText =
-    formatCurrency(totalAmount);
+  const totalLeadsCount = filteredLeads.length;
+  const conversionRate =
+    totalLeadsCount > 0
+      ? ((closedDeals.length / totalLeadsCount) * 100).toFixed(1)
+      : 0;
+
+  const elNegociacao = document.getElementById("kpi-negociacao");
+  if (elNegociacao) elNegociacao.innerText = inNegotiation.length;
+
+  const elFechados = document.getElementById("kpi-fechados");
+  if (elFechados) elFechados.innerText = closedDeals.length;
+
+  const elValorTotal = document.getElementById("kpi-valor-total");
+  if (elValorTotal) elValorTotal.innerText = formatCurrency(totalAmount);
+
+  const elConversao = document.getElementById("kpi-conversao");
+  if (elConversao) elConversao.innerText = `${conversionRate}%`;
 
   const todayStr = new Date().toISOString().split("T")[0];
-  const alerts = leads.filter(
+  const alerts = filteredLeads.filter(
     (l) =>
       l.retorno &&
       l.retorno <= todayStr &&
       l.estagio !== "fechado" &&
-      l.estagio !== "perdido",
+      l.estagio !== "perdido"
   );
-  document.getElementById("kpi-followups").innerText = alerts.length;
+
+  const elFollowups = document.getElementById("kpi-followups");
+  if (elFollowups) elFollowups.innerText = alerts.length;
 
   const alertsContainer = document.getElementById("dashboard-alerts");
-  if (alerts.length === 0) {
-    alertsContainer.innerHTML = `<p class="empty-state">Nenhum follow-up urgente pendente.</p>`;
-  } else {
-    alertsContainer.innerHTML = alerts
-      .map(
-        (l) => `
+  if (alertsContainer) {
+    if (alerts.length === 0) {
+      alertsContainer.innerHTML = `<p class="empty-state">Nenhum follow-up urgente pendente.</p>`;
+    } else {
+      alertsContainer.innerHTML = alerts
+        .map(
+          (l) => `
             <div class="alert-item ${l.retorno < todayStr ? "overdue" : "today"}">
                 <div class="alert-info">
                     <span class="alert-name">${l.nome}</span>
@@ -362,29 +391,102 @@ function renderDashboard() {
                 <span class="alert-date">${l.retorno < todayStr ? "ATRASADO" : "HOJE"}</span>
                 <button class="btn-icon" onclick="editLead('${l.id}')"><i data-lucide="pencil"></i></button>
             </div>
-        `,
-      )
-      .join("");
+        `
+        )
+        .join("");
+    }
   }
 
-  const summaryContainer = document.getElementById("funnel-summary");
-  summaryContainer.innerHTML = STAGES.map((s) => {
-    const count = leads.filter((l) => l.estagio === s.id).length;
-    return `<div class="funnel-pill"><span class="pill-count">${count}</span><span class="pill-label">${s.label}</span></div>`;
-  }).join("");
+  renderCharts(filteredLeads);
 
   if (window.lucide) lucide.createIcons();
 }
 
+function renderCharts(dataLeads) {
+  const stageCounts = STAGES.map(
+    (s) => dataLeads.filter((l) => l.estagio === s.id).length
+  );
+  const stageLabels = STAGES.map((s) => s.label);
+  const stageColors = STAGES.map((s) => s.color);
+
+  const ctxFunil = document.getElementById("chartFunil");
+  if (ctxFunil && window.Chart) {
+    if (chartFunilInstance) chartFunilInstance.destroy();
+    chartFunilInstance = new Chart(ctxFunil, {
+      type: "doughnut",
+      data: {
+        labels: stageLabels,
+        datasets: [
+          {
+            data: stageCounts,
+            backgroundColor: stageColors,
+            borderWidth: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { color: "#ccc", font: { size: 11 } },
+          },
+        },
+      },
+    });
+  }
+
+  const origens = ["instagram", "indicacao", "site", "evento"];
+  const origemLabels = ["Instagram", "Indicação", "Site/Google", "Evento"];
+  const origemValores = origens.map((o) => {
+    return dataLeads
+      .filter((l) => l.origem === o && l.estagio !== "perdido")
+      .reduce((acc, curr) => acc + curr.custo, 0);
+  });
+
+  const ctxOrigem = document.getElementById("chartOrigem");
+  if (ctxOrigem && window.Chart) {
+    if (chartOrigemInstance) chartOrigemInstance.destroy();
+    chartOrigemInstance = new Chart(ctxOrigem, {
+      type: "bar",
+      data: {
+        labels: origemLabels,
+        datasets: [
+          {
+            label: "Valor Acumulado (R$)",
+            data: origemValores,
+            backgroundColor: "#4c8ce8",
+            borderRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: "#888" }, grid: { display: false } },
+          y: { ticks: { color: "#888" }, grid: { color: "#2a2d3d" } },
+        },
+        plugins: {
+          legend: { display: false },
+        },
+      },
+    });
+  }
+}
+
+// ── OUTRAS RENDERIZAÇÕES ───────────────────────────────────────────
+
 function renderKanban() {
   const board = document.getElementById("kanban-board");
   if (!board) return;
-  const filterOrigem = document.getElementById("kanban-filter-origem").value;
+  const filterOrigem = document.getElementById("kanban-filter-origem") ? document.getElementById("kanban-filter-origem").value : "";
 
   board.innerHTML = STAGES.map((stage) => {
     const stageLeads = leads.filter(
       (l) =>
-        l.estagio === stage.id && (!filterOrigem || l.origem === filterOrigem),
+        l.estagio === stage.id && (!filterOrigem || l.origem === filterOrigem)
     );
     return `
             <div class="kanban-col" ondragover="allowDrop(event)" ondrop="drop(event, '${stage.id}')">
@@ -407,7 +509,7 @@ function renderKanban() {
                             </div>
                             ${l.custo ? `<div class="card-cost">${formatCurrency(l.custo)}</div>` : ""}
                         </div>
-                    `,
+                    `
                             )
                             .join("")
                     }
@@ -419,14 +521,15 @@ function renderKanban() {
 
 function renderFollowup() {
   const container = document.getElementById("followup-list");
-  const filter = document.getElementById("followup-filter").value;
+  if (!container) return;
+  const filter = document.getElementById("followup-filter") ? document.getElementById("followup-filter").value : "pendentes";
   const todayStr = new Date().toISOString().split("T")[0];
 
   let filtered = leads.filter((l) => l.retorno || l.nascimento);
 
   if (filter === "pendentes")
     filtered = filtered.filter(
-      (l) => l.retorno <= todayStr && l.estagio !== "fechado",
+      (l) => l.retorno <= todayStr && l.estagio !== "fechado"
     );
   if (filter === "hoje")
     filtered = filtered.filter((l) => l.retorno === todayStr);
@@ -498,8 +601,10 @@ function renderLeads() {
   const tbody = document.getElementById("leads-tbody");
   if (!tbody) return;
 
-  const fStage = document.getElementById("leads-filter-stage").value;
-  const fOrigem = document.getElementById("leads-filter-origem").value;
+  const fStageEl = document.getElementById("leads-filter-stage");
+  const fOrigemEl = document.getElementById("leads-filter-origem");
+  const fStage = fStageEl ? fStageEl.value : "";
+  const fOrigem = fOrigemEl ? fOrigemEl.value : "";
 
   let filtered = leads;
   if (fStage) filtered = filtered.filter((l) => l.estagio === fStage);
@@ -533,6 +638,40 @@ function renderLeads() {
     .join("");
 
   if (window.lucide) lucide.createIcons();
+}
+
+// ── CAPTURA DE LEADS EXTERNOS (SITE / TRÁFEGO PAGO) ────────────────
+
+function capturarLeadExterno(dadosFormulario) {
+  const novoLead = {
+    id: Date.now().toString(),
+    nome: dadosFormulario.nome,
+    email: dadosFormulario.email,
+    telefone: dadosFormulario.telefone,
+    empresa: dadosFormulario.empresa || "",
+    origem: dadosFormulario.origem || "site",
+    estagio: "prospeccao",
+    custo: parseFloat(dadosFormulario.valor) || 0,
+    dor: dadosFormulario.mensagem || "Veio pelo formulário do site",
+    retorno: new Date().toISOString().split("T")[0],
+    historicoNotas: [
+      {
+        id: Date.now().toString(),
+        texto: `Lead capturado automaticamente via ${dadosFormulario.origem || "site"}.`,
+        dataHora: new Date().toISOString(),
+      },
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+
+  leads.push(novoLead);
+  persistData();
+
+  const activeNav = document.querySelector(".nav-item.active");
+  const activeView = activeNav ? activeNav.getAttribute("data-view") : "dashboard";
+  showView(activeView);
+
+  showToast(`Novo lead recebido: ${novoLead.nome}!`);
 }
 
 // ── DRAG AND DROP KANBAN ────────────────────────────────────────────
@@ -600,7 +739,6 @@ function openDetailModal(id) {
 
         <hr style="border: 0; border-top: 1px solid #2a2d3d; margin: 15px 0;">
 
-        <!-- ÁREA DE REGISTRO DE NOTA NA TIMELINE -->
         <div style="margin-bottom:20px;">
             <label style="font-weight:bold; font-size:0.9rem; display:block; margin-bottom:6px;">Adicionar Nota ao Histórico</label>
             <div style="display:flex; gap:8px;">
@@ -609,7 +747,6 @@ function openDetailModal(id) {
             </div>
         </div>
 
-        <!-- TIMELINE DE INTERAÇÕES -->
         <div>
             <strong style="font-size:0.95rem; display:block; margin-bottom:12px;">Histórico de Interações (Timeline)</strong>
             ${
@@ -620,7 +757,7 @@ function openDetailModal(id) {
                     ${historico
                       .map((nota) => {
                         const dataFormatada = new Date(
-                          nota.dataHora,
+                          nota.dataHora
                         ).toLocaleString("pt-BR", {
                           dateStyle: "short",
                           timeStyle: "short",
@@ -671,7 +808,7 @@ function updateFollowupBadge() {
       l.retorno &&
       l.retorno <= todayStr &&
       l.estagio !== "fechado" &&
-      l.estagio !== "perdido",
+      l.estagio !== "perdido"
   ).length;
   const badge = document.getElementById("followup-badge");
   if (badge) {
@@ -697,7 +834,7 @@ function initModalSelectors() {
   const select = document.getElementById("f-estagio");
   if (select) {
     select.innerHTML = STAGES.map(
-      (s) => `<option value="${s.id}">${s.label}</option>`,
+      (s) => `<option value="${s.id}">${s.label}</option>`
     ).join("");
   }
 }
@@ -728,7 +865,7 @@ function globalSearch(query) {
   const filtered = leads.filter(
     (l) =>
       l.nome.toLowerCase().includes(query.toLowerCase()) ||
-      (l.empresa && l.empresa.toLowerCase().includes(query.toLowerCase())),
+      (l.empresa && l.empresa.toLowerCase().includes(query.toLowerCase()))
   );
   const tbody = document.getElementById("leads-tbody");
 
@@ -749,158 +886,14 @@ function globalSearch(query) {
                 <td>${formatCurrency(l.custo)}</td>
                 <td>${l.retorno ? formatDate(l.retorno) : "-"}</td>
                 <td>
-                    <button class="btn-icon" onclick="editLead('${l.id}')"><i data-lucide="pencil"></i></button>
-                    <button class="btn-danger" onclick="deleteLead('${l.id}')"><i data-lucide="trash-2"></i></button>
+                    <div class="td-actions">
+                        <button class="btn-icon" onclick="editLead('${l.id}')"><i data-lucide="pencil"></i></button>
+                        <button class="btn-danger" onclick="deleteLead('${l.id}')"><i data-lucide="trash-2"></i></button>
+                    </div>
                 </td>
             </tr>
         `;
     })
     .join("");
   if (window.lucide) lucide.createIcons();
-}
-// Variáveis para manter as instâncias dos gráficos (evita duplicar ao filtrar)
-let chartFunilInstance = null;
-let chartOrigemInstance = null;
-
-function renderDashboard() {
-  const filterOrigem = document.getElementById("dash-filter-origem")
-    ? document.getElementById("dash-filter-origem").value
-    : "";
-
-  // Aplica o filtro de origem nos dados
-  let filteredLeads = leads;
-  if (filterOrigem) {
-    filteredLeads = leads.filter((l) => l.origem === filterOrigem);
-  }
-
-  // Cálculos dos KPIs
-  const inNegotiation = filteredLeads.filter((l) =>
-    ["prospeccao", "visita", "orcamento", "negociacao"].includes(l.estagio),
-  );
-  const closedDeals = filteredLeads.filter((l) => l.estagio === "fechado");
-  const totalAmount = inNegotiation.reduce((acc, curr) => acc + curr.custo, 0);
-
-  const totalLeadsCount = filteredLeads.length;
-  const conversionRate =
-    totalLeadsCount > 0
-      ? ((closedDeals.length / totalLeadsCount) * 100).toFixed(1)
-      : 0;
-
-  // Atualiza elementos HTML
-  document.getElementById("kpi-negociacao").innerText = inNegotiation.length;
-  document.getElementById("kpi-fechados").innerText = closedDeals.length;
-  document.getElementById("kpi-valor-total").innerText =
-    formatCurrency(totalAmount);
-  document.getElementById("kpi-conversao").innerText = `${conversionRate}%`;
-
-  // Atualiza Alertas de Follow-up
-  const todayStr = new Date().toISOString().split("T")[0];
-  const alerts = filteredLeads.filter(
-    (l) =>
-      l.retorno &&
-      l.retorno <= todayStr &&
-      l.estagio !== "fechado" &&
-      l.estagio !== "perdido",
-  );
-
-  const alertsContainer = document.getElementById("dashboard-alerts");
-  if (alerts.length === 0) {
-    alertsContainer.innerHTML = `<p class="empty-state">Nenhum follow-up urgente pendente.</p>`;
-  } else {
-    alertsContainer.innerHTML = alerts
-      .map(
-        (l) => `
-            <div class="alert-item ${l.retorno < todayStr ? "overdue" : "today"}">
-                <div class="alert-info">
-                    <span class="alert-name">${l.nome}</span>
-                    <span class="alert-meta">${l.empresa || l.telefone}</span>
-                </div>
-                <span class="alert-date">${l.retorno < todayStr ? "ATRASADO" : "HOJE"}</span>
-                <button class="btn-icon" onclick="editLead('${l.id}')"><i data-lucide="pencil"></i></button>
-            </div>
-        `,
-      )
-      .join("");
-  }
-
-  // Renderiza os Gráficos
-  renderCharts(filteredLeads);
-
-  if (window.lucide) lucide.createIcons();
-}
-
-function renderCharts(dataLeads) {
-  // 1. DADOS DO GRÁFICO DE ETAPAS (FUNIL)
-  const stageCounts = STAGES.map(
-    (s) => dataLeads.filter((l) => l.estagio === s.id).length,
-  );
-  const stageLabels = STAGES.map((s) => s.label);
-  const stageColors = STAGES.map((s) => s.color);
-
-  const ctxFunil = document.getElementById("chartFunil");
-  if (ctxFunil) {
-    if (chartFunilInstance) chartFunilInstance.destroy();
-    chartFunilInstance = new Chart(ctxFunil, {
-      type: "doughnut",
-      data: {
-        labels: stageLabels,
-        datasets: [
-          {
-            data: stageCounts,
-            backgroundColor: stageColors,
-            borderWidth: 0,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: "#ccc", font: { size: 11 } },
-          },
-        },
-      },
-    });
-  }
-
-  // 2. DADOS DO GRÁFICO DE ORIGEM x RECEITA
-  const origens = ["instagram", "indicacao", "site", "evento"];
-  const origemLabels = ["Instagram", "Indicação", "Site/Google", "Evento"];
-  const origemValores = origens.map((o) => {
-    return dataLeads
-      .filter((l) => l.origem === o && l.estagio !== "perdido")
-      .reduce((acc, curr) => acc + curr.custo, 0);
-  });
-
-  const ctxOrigem = document.getElementById("chartOrigem");
-  if (ctxOrigem) {
-    if (chartOrigemInstance) chartOrigemInstance.destroy();
-    chartOrigemInstance = new Chart(ctxOrigem, {
-      type: "bar",
-      data: {
-        labels: origemLabels,
-        datasets: [
-          {
-            label: "Valor Acumulado (R$)",
-            data: origemValores,
-            backgroundColor: "#4c8ce8",
-            borderRadius: 4,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { ticks: { color: "#888" }, grid: { display: false } },
-          y: { ticks: { color: "#888" }, grid: { color: "#2a2d3d" } },
-        },
-        plugins: {
-          legend: { display: false },
-        },
-      },
-    });
-  }
 }
