@@ -414,7 +414,7 @@ function globalSearch(query) {
     if (window.lucide) lucide.createIcons();
 }
 // ==========================================================
-// 🚀 INTEGRAÇÕES RÁPIDAS CORRIGIDAS (WHATSAPP, E-MAIL E CALENDÁRIO MULTI-PLATAFORMA)
+// 🚀 INTEGRAÇÕES RÁPIDAS CORRIGIDAS (EMAIL & CALENDÁRIO)
 // ==========================================================
 
 function enviarWhatsApp(telefone, nome) {
@@ -427,78 +427,77 @@ function enviarWhatsApp(telefone, nome) {
     window.open(`https://wa.me/55${numLimpo}?text=${mensagem}`, '_blank');
 }
 
-// E-mail corrigido: Abre o Gmail Web direto no navegador (ou Mailto como fallback)
 function enviarEmail(email, nome) {
-    if (!email || email === '-') {
-        showToast("Lead sem e-mail cadastrado!");
+    if (!email) {
+        showToast("Lead sem e-mail cadastrado.");
         return;
     }
     const assunto = encodeURIComponent(`Acompanhamento - Atendimento ${nome}`);
-    const corpo = encodeURIComponent(`Olá ${nome},\n\nConforme combinado, estou entrando em contato para dar continuidade ao nosso atendimento.\n\nFico no aguardo!`);
+    const corpo = encodeURIComponent(`Olá ${nome},\n\nConforme combinado, estou entrando em contato para dar continuidade ao nosso processo.\n\nFico no aguardo!`);
     
-    // Tenta abrir no Gmail Web diretamente
-    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${assunto}&body=${corpo}`;
+    // Abre a tela de composição do Gmail Web direto no navegador (Garantido de funcionar)
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${assunto}&body=${corpo}`;
     window.open(gmailUrl, '_blank');
 }
 
-// Calendário Multi-Plataforma (Abre menu de escolha: Google, Apple, Notion, Outlook)
-async function adicionarAoCalendario(nome, dataRetorno) {
+// Cria uma Reunião/Convite no Google Calendar e convida o cliente por e-mail
+function agendarReuniaoGoogle(nome, email, dataRetorno) {
     if (!dataRetorno) {
         showToast("Sem data de retorno definida.");
         return;
     }
-
-    const dataFormatada = dataRetorno.replace(/-/g, ''); // Ex: 20260721
-    const titulo = `Follow-up - ${nome}`;
-    const detalhes = `Retornar contato com o lead ${nome}`;
     
-    // Link do Google Calendar
-    const googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${dataFormatada}/${dataFormatada}&details=${encodeURIComponent(detalhes)}`;
+    // Formata a data (YYYYMMDD) para o padrão do Google
+    const dataClean = dataRetorno.replace(/-/g, '');
+    const dataInicio = `${dataClean}T100000Z`; // Ex: 10:00 AM UTC
+    const dataFim = `${dataClean}T110000Z`;    // Ex: 11:00 AM UTC
+    
+    const titulo = encodeURIComponent(`Reunião de Alinhamento - ${nome}`);
+    const detalhes = encodeURIComponent(`Reunião de acompanhamento e apresentação agendada via CRM para o cliente ${nome}.`);
+    
+    // add= adiciona o e-mail do lead como Convidado (Gera o convite oficial)
+    let googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${titulo}&dates=${dataInicio}/${dataFim}&details=${detalhes}`;
+    if (email) {
+        googleUrl += `&add=${encodeURIComponent(email)}`;
+    }
+    
+    window.open(googleUrl, '_blank');
+}
 
-    // Criar o arquivo de evento universal (.ics) para Apple Calendar / Notion / Outlook
-    const icsContent = `BEGIN:VCALENDAR
+// Gera arquivo .ICS universal (Funciona para Apple Calendar, Outlook e Notion Calendar)
+function baixarEventoICS(nome, email, dataRetorno) {
+    if (!dataRetorno) {
+        showToast("Sem data de retorno definida.");
+        return;
+    }
+    const dataClean = dataRetorno.replace(/-/g, '');
+    
+    const icsData = `BEGIN:VCALENDAR
 VERSION:2.0
+PRODID:-//SystemCRM//BR
 BEGIN:VEVENT
-SUMMARY:${titulo}
-DESCRIPTION:${detalhes}
-DTSTART;VALUE=DATE:${dataFormatada}
+SUMMARY:Reunião com ${nome}
+DESCRIPTION:Acompanhamento comercial via SystemCRM.
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:MAILTO:${email || 'cliente@email.com'}
+DTSTART:${dataClean}T100000Z
+DTEND:${dataClean}T110000Z
+STATUS:CONFIRMED
 END:VEVENT
 END:VCALENDAR`;
 
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const file = new File([blob], `Followup_${nome}.ics`, { type: 'text/calendar' });
-
-    // Se o navegador/celular suportar o menu de compartilhamento nativo (mostra Notion, Apple, etc.)
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-            await navigator.share({
-                title: titulo,
-                text: detalhes,
-                files: [file]
-            });
-            return;
-        } catch (err) {
-            // Se o usuário cancelar ou falhar, segue para a opção manual abaixo
-        }
-    }
-
-    // Se estiver no computador, abre o Google Agenda em nova aba E baixa o arquivo .ics para Apple/Notion
-    window.open(googleUrl, '_blank');
-    
-    // Baixa o .ics automaticamente para quem usa Notion / Apple / Outlook
+    const blob = new Blob([icsData], { type: 'text/calendar;charset=utf-8' });
     const link = document.createElement('a');
     link.href = window.URL.createObjectURL(blob);
-    link.setAttribute('download', `Followup_${nome}.ics`);
+    link.setAttribute('download', `Reuniao_${nome}.ics`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    showToast("Abrindo Google Agenda e baixando .ics para Notion/Apple!");
+    showToast("Convite de agenda (.ics) baixado!");
 }
 
 
 // ==========================================================
-// 🔔 RENDER FOLLOW-UP ATUALIZADO
+// 🔔 RENDER FOLLOW-UP
 // ==========================================================
 
 function renderFollowup() {
@@ -523,25 +522,30 @@ function renderFollowup() {
             <div class="followup-item ${l.retorno < hoje ? 'overdue' : (l.retorno === hoje ? 'today' : 'future')}">
                 <div class="fu-info">
                     <div class="fu-name">${l.nome}</div>
-                    <div class="fu-sub">${stageObj.label} | ${l.telefone}</div>
+                    <div class="fu-sub">${stageObj.label} | ${l.telefone} ${l.email ? '| ' + l.email : ''}</div>
                 </div>
                 <div class="fu-date-wrap">
                     <span class="fu-date">${formatDate(l.retorno)}</span>
                 </div>
                 <div class="fu-actions" style="display: flex; gap: 8px; align-items: center;">
-                    <!-- Botão WhatsApp -->
+                    <!-- Clique Rápido WhatsApp -->
                     <button class="btn-icon" title="Enviar WhatsApp" onclick="enviarWhatsApp('${l.telefone}', '${l.nome}')">
                         <i data-lucide="message-square"></i>
                     </button>
                     
-                    <!-- Botão E-mail (Gmail Web) -->
-                    <button class="btn-icon" title="Enviar E-mail via Gmail" onclick="enviarEmail('${l.email}', '${l.nome}')">
+                    <!-- Abrir Gmail com E-mail preenchido -->
+                    <button class="btn-icon" title="Enviar E-mail pelo Gmail" onclick="enviarEmail('${l.email}', '${l.nome}')">
                         <i data-lucide="mail"></i>
                     </button>
                     
-                    <!-- Botão Salvar na Agenda (Google / Apple / Notion / ICS) -->
-                    <button class="btn-icon" title="Adicionar à Agenda (Google, Apple, Notion)" onclick="adicionarAoCalendario('${l.nome}', '${l.retorno}')">
+                    <!-- Convidar para Reunião no Google Calendar (Com o e-mail do lead convidado) -->
+                    <button class="btn-icon" title="Convidar para Reunião (Google Calendar)" onclick="agendarReuniaoGoogle('${l.nome}', '${l.email}', '${l.retorno}')">
                         <i data-lucide="calendar"></i>
+                    </button>
+
+                    <!-- Baixar .ICS (Para Apple Calendar, Outlook e Notion Calendar) -->
+                    <button class="btn-icon" title="Baixar Convite .ICS (Apple/Notion/Outlook)" onclick="baixarEventoICS('${l.nome}', '${l.email}', '${l.retorno}')">
+                        <i data-lucide="download"></i>
                     </button>
 
                     <!-- Botão de Editar / Retornar -->
